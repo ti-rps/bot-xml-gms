@@ -1,0 +1,37 @@
+# Arquivo .gitignore para o projeto bot-xml-gms
+
+# 1. Ambiente Virtual
+venv/
+/venv/
+.venv/
+
+# 2. Arquivos de Credenciais e Configurações Sensíveis
+.env
+
+# 3. Cache e Arquivos Compilados do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 4. Logs e Arquivos de Saída
+logs/
+*.log
+downloads/
+
+# 5. Arquivos de Configuração de IDEs (Editores de Código)
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# 6. Arquivos de dependências de pacotes
+.pdm.toml
+pyproject.toml.lock
+poetry.lock
+Pipfile.lock
+
+# 7. Arquivos de Teste
+.pytest_cache/
+.coverage
+htmlcov/
