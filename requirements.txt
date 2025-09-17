@@ -1,0 +1,8 @@
+# Framework de automação web
+selenium
+
+# Para carregar variáveis de ambiente do arquivo .env
+python-dotenv
+
+# Para ler arquivos de configuração no formato YAML
+PyYAML
