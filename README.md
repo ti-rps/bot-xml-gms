@@ -6,48 +6,46 @@ Automação para download de arquivos XML, SPED e relatórios contábeis do sist
 
 Este projeto foi estruturado para separar as responsabilidades em camadas, facilitando a manutenção, o teste e a escalabilidade da automação.
 
-/BOT-XML-GMS  
-|  
-|-- 📂 config/  
-|   |-- init.py  
-|   |-- selectors.yaml        # Mapeamento de seletores CSS/XPath  
-|   |-- settings.py           # Configurações gerais: URLs, paths, constantes  
-|  
-|-- 📂 logs/  
-|   |-- bot.log               # Arquivo de log gerado pela execução  
-|  
-|-- 📂 downloads/  
-|   |-- pending/              # Arquivos baixados que ainda não foram processados/movidos  
-|   |-- processed/            # Arquivos já processados e organizados  
-|  
-|-- 📂 src/  
-|   |-- init.py  
-|   |  
-|   |-- 📂 core/  
-|   |   |-- init.py  
-|   |   |-- orchestrator.py   # Orquestra o fluxo principal da automação  
-|   |  
-|   |-- 📂 automation/  
-|   |   |-- init.py  
-|   |   |-- browser_handler.py # Gerencia a instância do navegador (Selenium/Playwright)  
-|   |   |-- 📂 page_objects/  
-|   |       |-- init.py  
-|   |       |-- base_page.py  
-|   |       |-- login_page.py  
-|   |       |-- home_page.py  
-|   |       |-- export_page.py  
-|   |  
-|   |-- 📂 utils/  
-|       |-- init.py  
-|       |-- file_handler.py     # Funções para mover, renomear, verificar arquivos  
-|       |-- logger_config.py    # Módulo para configurar o sistema de logging  
-|       |-- data_handler.py     # Funções para ler dados de entrada (ex: lista de lojas de um CSV)  
-|  
-|-- main.py                     # Ponto de entrada da aplicação. Deve ser muito simples.  
-|-- requirements.txt            # Dependências do projeto  
-|-- .env                        # Credenciais e variáveis de ambiente (NUNCA versionar)  
-|-- .gitignore  
-|-- README.md                   # Este arquivo  
+/BOT-XML-GMS
+├── 📂 config/
+│   ├── __init__.py
+│   ├── selectors.yaml        # Mapeamento de seletores CSS/XPath
+│   └── settings.py           # Configurações gerais: URLs, paths, constantes
+│
+├── 📂 downloads/
+│   ├── 📂 pending/             # Arquivos baixados que ainda não foram processados/movidos
+│   └── 📂 processed/           # Arquivos já processados e organizados
+│
+├── 📂 logs/
+│   └── bot.log                 # Arquivo de log gerado pela execução
+│
+├── 📂 src/
+│   ├── __init__.py
+│   ├── 📂 core/
+│   │   ├── __init__.py
+│   │   └── orchestrator.py     # Orquestra o fluxo principal da automação
+│   │
+│   ├── 📂 automation/
+│   │   ├── __init__.py
+│   │   ├── browser_handler.py  # Gerencia a instância do navegador (Selenium/Playwright)
+│   │   └── 📂 page_objects/
+│   │       ├── __init__.py
+│   │       ├── base_page.py
+│   │       ├── login_page.py
+│   │       ├── home_page.py
+│   │       └── export_page.py
+│   │
+│   └── 📂 utils/
+│       ├── __init__.py
+│       ├── file_handler.py     # Funções para mover, renomear, verificar arquivos
+│       ├── logger_config.py    # Módulo para configurar o sistema de logging
+│       └── data_handler.py     # Funções para ler dados de entrada (ex: lista de lojas de um CSV)
+│
+├── .env                      # Credenciais e variáveis de ambiente (NUNCA versionar)
+├── .gitignore
+├── main.py                   # Ponto de entrada da aplicação. Deve ser muito simples.
+├── requirements.txt          # Dependências do projeto
+└── README.md                 # Este arquivo
 
 ## 📄 Descrição dos Componentes
 
