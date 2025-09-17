@@ -97,7 +97,3 @@ A pasta `src` (source) centraliza todo o código da sua aplicação, mantendo a 
 4.  **Browser Handler**: Crie a classe `BrowserHandler` para encapsular a lógica do Selenium/Playwright. O `Orchestrator` irá instanciar esta classe.
 5.  **Orchestrator**: Mova a lógica principal do seu script atual para o `Orchestrator`. Ele não deve mais conter código de Selenium diretamente, apenas chamadas para os page_objects.
 6.  **Handlers (Utils)**: Isole as funções de manipulação de arquivos e de leitura de dados nos seus respectivos handlers na pasta `utils`.
-
-Essa abordagem deixará seu projeto muito mais profissional, fácil de depurar (com logs detalhados), de dar manutenção (se um seletor mudar, você só mexe no `selectors.yaml`) e de estender no futuro.
-
-O que acha desta proposta? Podemos começar a detalhar o código de algum desses arquivos se quiser!
