@@ -1,0 +1,13 @@
+# config/selectors.yaml
+login_page:
+  username_input: "[data-cy='login-usuario-input-field']"
+  password_input: "[data-cy='login-senha-input-field']"
+  login_button: "[data-cy='login-entrar-button']"
+
+home_page:
+  # Exemplo: Seletor para um menu de usuário que aparece após o login
+  user_menu: "#user-profile-menu"
+
+export_page:
+  # Exemplo: Seletor para o botão de iniciar o download
+  download_button: "button[data-testid='start-download']"

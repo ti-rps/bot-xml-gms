@@ -52,7 +52,6 @@ Este projeto foi estruturado para separar as responsabilidades em camadas, facil
 ### `main.py` (Ponto de Entrada)
 **Responsabilidade:** Apenas iniciar a aplicação.
 **O que faz:**
-- Carrega as variáveis de ambiente do `.env`.
 - Configura o logger.
 - Instancia e executa o `Orchestrator`.
 
@@ -88,12 +87,3 @@ A pasta `src` (source) centraliza todo o código da sua aplicação, mantendo a 
 - **`file_handler.py`**: Funções como `mover_para_pasta_da_loja`, `renomear_relatorio`, `verificar_download_concluido`.
 - **`logger_config.py`**: Uma função `setup_logger()` que configura o formato, nível (INFO, DEBUG) e local do arquivo de log.
 - **`data_handler.py`**: Funções para ler dados de entrada. É muito melhor ler a lista de lojas de um arquivo `.csv` ou `.xlsx` do que deixá-la "hardcoded" no código. Ex: `ler_lojas_de_csv()`.
-
-## 🚀 Planejamento da Refatoração (Passo a Passo)
-
-1.  **Estrutura**: Crie as pastas e arquivos vazios conforme a sugestão acima. Mova seus arquivos existentes para os novos locais.
-2.  **Configuração**: Centralize todas as configurações em `config/settings.py` e os segredos (usuário, senha) em um arquivo `.env` (use a biblioteca `python-dotenv` para carregá-los).
-3.  **Logging**: Implemente o `logger_config.py` e chame a função de setup no início do `main.py`. Substitua todos os `print()` por `logger.info()`, `logger.error()`, etc.
-4.  **Browser Handler**: Crie a classe `BrowserHandler` para encapsular a lógica do Selenium/Playwright. O `Orchestrator` irá instanciar esta classe.
-5.  **Orchestrator**: Mova a lógica principal do seu script atual para o `Orchestrator`. Ele não deve mais conter código de Selenium diretamente, apenas chamadas para os page_objects.
-6.  **Handlers (Utils)**: Isole as funções de manipulação de arquivos e de leitura de dados nos seus respectivos handlers na pasta `utils`.
