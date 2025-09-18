@@ -1,11 +1,11 @@
 # requirements.txt
 
 # Framework de automação web
-selenium
-webdriver-manager
+selenium == 4.35.0
+webdriver-manager == 4.0.2
 
 # Para carregar variáveis de ambiente do arquivo .env
-python-dotenv
+python-dotenv == 1.0.0
 
 # Para ler arquivos de configuração no formato YAML
-PyYAML
+PyYAML == 6.0.2

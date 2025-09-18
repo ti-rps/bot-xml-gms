@@ -19,7 +19,10 @@ LOGS_DIR = BASE_DIR / "logs"
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 PENDING_DIR = DOWNLOADS_DIR / "pending"
 PROCESSED_DIR = DOWNLOADS_DIR / "processed"
-DESTINATION_DIR = Path(os.getenv("DESTINATION_ROOT_DIR", str(PROCESSED_DIR)))
+DESTINATION_DIR = Path(str(PROCESSED_DIR))
+
+# --- Configurações do Navegador ---
+DEFAULT_TIMEOUT = 30
 
 # --- Arquivos de Configuração ---
 SELECTORS_FILE = BASE_DIR / "config" / "selectors.yaml"

@@ -2,7 +2,7 @@
 login_page:
   username_input: "[data-cy='login-usuario-input-field']"
   password_input: "[data-cy='login-senha-input-field']"
-  login_button_xpath: "[data-cy='login-entrar-button']"
+  login_button: "[data-cy='login-entrar-button']"
 
 home_page:
   # Exemplo: Seletor para um menu de usuário que aparece após o login
