@@ -1,17 +1,13 @@
 # config/selectors.yaml
 login_page:
-  username_input: "#input-19" # seletor CSS
-  password_input: "#input-20" # seletor CSS
-  login_button: ".flora-button.flora-button--text-only.flora-button--standard.flora-button--shape-small.flora-button--size-standard.flora-body-small[disabled='disabled']"
+  username_input: "[data-cy='login-usuario-input-field']"
+  password_input: "[data-cy='login-senha-input-field']"
+  login_button_xpath: "[data-cy='login-entrar-button']"
 
 home_page:
-  # Exemplo: XPath para um link que contém o texto 'Exportação'
-  export_link: "//a[contains(text(), 'Exportação')]"
+  # Exemplo: Seletor para um menu de usuário que aparece após o login
+  user_menu: "#user-profile-menu"
 
 export_page:
-  start_date_input: "#data-inicial" # Exemplo: ID do campo de data inicial
-  end_date_input: "#data-final"
-  store_select_dropdown: "#filial-select"
-  generate_report_button: "button.btn-primary"
-  # Seletor para um ícone ou mensagem que indica que o download começou/terminou
-  download_status_indicator: ".download-complete-toast"
+  # Exemplo: Seletor para o botão de iniciar o download
+  download_button: "button[data-testid='start-download']"

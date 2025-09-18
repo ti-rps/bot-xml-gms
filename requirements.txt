@@ -1,3 +1,5 @@
+# requirements.txt
+
 # Framework de automação web
 selenium
 webdriver-manager

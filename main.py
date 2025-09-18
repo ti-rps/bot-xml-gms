@@ -6,7 +6,8 @@ from src.utils.logger_config import setup_logger
 def main():
     setup_logger()
     try:
-        orchestrator = Orchestrator()
+        is_headless = False
+        orchestrator = Orchestrator(headless=is_headless)
         orchestrator.run()
     except Exception as e:
         logging.critical(f"Erro inesperado na execução principal: {e}", exc_info=True)
