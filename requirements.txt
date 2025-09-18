@@ -1,5 +1,6 @@
 # Framework de automação web
 selenium
+webdriver-manager
 
 # Para carregar variáveis de ambiente do arquivo .env
 python-dotenv

@@ -1,3 +1,4 @@
+#config/settings.py
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -9,7 +10,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- Credenciais e URLs (carregadas do .env) ---
-LOGIN_URL = os.getenv("GMS_LOGIN_URL", "https://url.padrao.caso.nao.exista/login")
+LOGIN_URL = os.getenv("GMS_LOGIN_URL")
 GMS_USER = os.getenv("GMS_USER")
 GMS_PASSWORD = os.getenv("GMS_PASSWORD")
 
