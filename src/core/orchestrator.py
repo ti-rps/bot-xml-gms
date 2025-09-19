@@ -4,19 +4,26 @@ from src.automation.browser_handler import BrowserHandler
 from src.utils import data_handler
 from config import settings
 from src.automation.page_objects.login_page import LoginPage
+from src.automation.page_objects.home_page import HomePage
+from src.automation.page_objects.export_page import ExportPage
 
 logger = logging.getLogger(__name__)
 
 class Orchestrator:
-    def __init__(self, headless: bool = True):
-        self.headless = headless
+    def __init__(self, params: dict):
+        self.headless = params.get('headless', True)
+        self.stores_to_process = params.get('lojas', [])
+        self.data_inicial = params.get('data_inicial')
+        self.data_final = params.get('data_final')
+        # Mais parâmetros podem ser adicionados conforme necessário
         self.browser_handler = None
-        self.stores_to_process = []
+        self.selectors = None
+    
     def setup(self):
         logger.info("Preparando ambiente para a execução...")
-        self.stores_to_process = data_handler.read_json_file(settings.STORES_DATA_FILE)
+        
         if not self.stores_to_process:
-            logger.warning("Nenhuma loja encontrada para processar.")
+            logger.warning("Nenhuma loja fornecida nos parâmetros para processar.")
             return False
         
         self.selectors = data_handler.load_yaml_file(settings.SELECTORS_FILE)
@@ -27,9 +34,6 @@ class Orchestrator:
         return True
     
     def run(self):
-        """
-        Executa o fluxo principal da automação.
-        """
         logger.info("🚀 --- INICIANDO AUTOMAÇÃO BOT-XML-GMS --- 🚀")
         
         if not self.setup():
@@ -53,10 +57,21 @@ class Orchestrator:
             
             logger.info("Login realizado com sucesso!")
 
-            # --- ETAPAS FUTURAS ---
+            logger.info("Navegando na página inicial...")
+            home_page_selectors = self.selectors.get('home_page', {})
+
+            home_page = HomePage(driver, home_page_selectors)
+            home_page.navigate_sidebar_export()
+
+            logger.info("Iniciando processo de exportação...")
+            export_page_selectors = self.selectors.get('export_page', {})   
+
+            export_page = ExportPage(driver, export_page_selectors)
+            export_page.export_data()
             
         except Exception as e:
             logger.critical(f"Ocorreu um erro fatal na orquestração: {e}", exc_info=True)
+            raise
         finally:
             if self.browser_handler:
                 self.browser_handler.close_browser()

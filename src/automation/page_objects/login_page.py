@@ -1,4 +1,5 @@
 import logging
+import time
 from selenium.webdriver.remote.webdriver import WebDriver
 from .base_page import BasePage
 from config import settings
@@ -20,6 +21,7 @@ class LoginPage(BasePage):
             logger.info("Preenchendo credenciais de login.")
             self.send_keys(self.selectors['username_input'], username)
             self.send_keys(self.selectors['password_input'], password)
+            time.sleep(1)
             self.click(self.selectors['login_button'])
         except KeyError as e:
             logger.error(f"Seletor não encontrado no dicionário para a página de login: {e}")

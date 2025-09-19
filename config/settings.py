@@ -26,7 +26,6 @@ DEFAULT_TIMEOUT = 30
 
 # --- Arquivos de Configuração ---
 SELECTORS_FILE = BASE_DIR / "config" / "selectors.yaml"
-STORES_DATA_FILE = BASE_DIR / "lojas.json"
 
 # --- Setup de Diretórios ---
 def create_dirs():

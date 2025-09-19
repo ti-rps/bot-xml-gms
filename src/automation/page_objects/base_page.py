@@ -1,3 +1,4 @@
+# page_objects/base_page.py
 import logging
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
@@ -14,8 +15,11 @@ class BasePage:
         self.driver = driver
         self.wait = WebDriverWait(self.driver, settings.DEFAULT_TIMEOUT)
 
+    def _get_by(self, selector: str):
+        return By.XPATH if selector.startswith('/') or selector.startswith('(') else By.CSS_SELECTOR
+
     def _find_element(self, selector: str) -> WebElement:
-        by = By.XPATH if selector.startswith('/') or selector.startswith('(') else By.CSS_SELECTOR
+        by = self._get_by(selector)
         try:
             return self.driver.find_element(by, selector)
         except NoSuchElementException:
@@ -23,7 +27,7 @@ class BasePage:
             raise
 
     def wait_for_element(self, selector: str) -> WebElement:
-        by = By.XPATH if selector.startswith('/') or selector.startswith('(') else By.CSS_SELECTOR
+        by = self._get_by(selector)
         try:
             return self.wait.until(EC.presence_of_element_located((by, selector)))
         except TimeoutException:
@@ -31,7 +35,7 @@ class BasePage:
             raise
 
     def click(self, selector: str):
-        by = By.XPATH if selector.startswith('/') or selector.startswith('(') else By.CSS_SELECTOR
+        by = self._get_by(selector)
         try:
             element = self.wait.until(EC.element_to_be_clickable((by, selector)))
             element.click()
@@ -49,6 +53,24 @@ class BasePage:
         except Exception as e:
             logger.error(f"Falha ao enviar texto para o elemento '{selector}': {e}")
             raise
+
+    def switch_to_iframe(self, selector: str):
+        by = self._get_by(selector)
+        try:
+            self.wait.until(EC.frame_to_be_available_and_switch_to_it((by, selector)))
+            logger.info(f"Entrou no iframe com seletor: '{selector}'")
+        except TimeoutException:
+            logger.error(f"Tempo de espera excedido para o iframe com seletor: '{selector}'")
+            raise
+
+
+    def switch_to_parent_iframe(self):
+        self.driver.switch_to.parent_frame()
+        logger.info("Voltando para o iframe pai")
+
+    def switch_to_default(self):
+        self.driver.switch_to.default_content()
+        logger.info("Voltando para o contexto principal")
 
     def get_current_url(self) -> str:
         return self.driver.current_url
