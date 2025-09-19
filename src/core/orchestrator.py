@@ -6,15 +6,17 @@ from config import settings
 from src.automation.page_objects.login_page import LoginPage
 from src.automation.page_objects.home_page import HomePage
 from src.automation.page_objects.export_page import ExportPage
+from src.utils.exceptions import AutomationException
 
 logger = logging.getLogger(__name__)
 
 class Orchestrator:
     def __init__(self, params: dict):
         self.headless = params.get('headless', True)
-        self.stores_to_process = params.get('lojas', [])
-        self.data_inicial = params.get('data_inicial')
-        self.data_final = params.get('data_final')
+        self.stores_to_process = params.get('stores', [])
+        self.document_type = params.get('document_type')
+        self.start_date = params.get('start_date')
+        self.end_date = params.get('end_date')
         # Mais parâmetros podem ser adicionados conforme necessário
         self.browser_handler = None
         self.selectors = None
@@ -67,10 +69,15 @@ class Orchestrator:
             export_page_selectors = self.selectors.get('export_page', {})   
 
             export_page = ExportPage(driver, export_page_selectors)
-            export_page.export_data()
+            export_page.export_data(self.document_type, self.start_date, self.end_date)
             
+        except AutomationException as e:
+            error_message = f"ERRO DE PROCESSO: {e}"
+            logger.error(error_message)
+            raise
         except Exception as e:
-            logger.critical(f"Ocorreu um erro fatal na orquestração: {e}", exc_info=True)
+            error_message = f"ERRO INESPERADO: Ocorreu uma falha crítica na orquestração."
+            logger.critical(error_message, exc_info=True)
             raise
         finally:
             if self.browser_handler:

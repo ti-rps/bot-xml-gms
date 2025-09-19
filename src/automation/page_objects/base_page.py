@@ -5,8 +5,11 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.webdriver.support.ui import Select
+from src.utils.exceptions import ElementNotFoundError
 from selenium.webdriver.common.by import By
 from config import settings
+import contextlib
 
 logger = logging.getLogger(__name__)
 
@@ -54,14 +57,38 @@ class BasePage:
             logger.error(f"Falha ao enviar texto para o elemento '{selector}': {e}")
             raise
 
-    def switch_to_iframe(self, selector: str):
-        by = self._get_by(selector)
+    def select_option_by_value(self, selector: str, value: str):
+        logger.info(f"Tentando selecionar a opção com valor '{value}' no seletor '{selector}'")
         try:
-            self.wait.until(EC.frame_to_be_available_and_switch_to_it((by, selector)))
-            logger.info(f"Entrou no iframe com seletor: '{selector}'")
-        except TimeoutException:
-            logger.error(f"Tempo de espera excedido para o iframe com seletor: '{selector}'")
+            select_element = self.wait_for_element(selector)
+            select = Select(select_element)
+            select.select_by_value(value)
+            logger.info(f"Opção com valor '{value}' selecionada com sucesso no seletor '{selector}'")
+        except NoSuchElementException:
+            logger.error(f"Não foi encontrada uma opção com o valor '{value}' no elemento '{selector}'.")
             raise
+        except Exception as e:
+            logger.error(f"Falha ao selecionar a opção com valor '{value}' no elemento '{selector}': {e}")
+            raise
+
+    @contextlib.contextmanager
+    def switch_to_iframe(self, selector):
+        logger.info(f"Tentando entrar no iframe com seletor: '{selector}'")
+        try:
+            iframe = self.wait_for_element(selector)
+            if not iframe:
+                raise ElementNotFoundError(f"Iframe com seletor '{selector}' não foi encontrado na página.")
+                
+            self.driver.switch_to.frame(iframe)
+            yield
+        
+        except ElementNotFoundError:
+            raise
+        except Exception as e:
+            raise ElementNotFoundError(f"Erro inesperado ao tentar entrar no iframe '{selector}': {e}")
+        finally:
+            logger.info("Voltando para o contexto principal")
+            self.driver.switch_to.default_content()
 
 
     def switch_to_parent_iframe(self):

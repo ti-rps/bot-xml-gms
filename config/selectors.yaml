@@ -11,5 +11,8 @@ home_page:
 
 export_page:
   legado_frame: "//iframe[@id='legadoFrame']"
-  include_button: "#botaoIncluir"
   popup_frame: "//iframe[@id='frameExportacaoDocumento']"
+  include_button: "#botaoIncluir"
+  start_date_input: "#dataInicio"
+  end_date_input: "#dataFim"
+  document_type_dropdown: "#documentos"

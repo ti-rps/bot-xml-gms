@@ -11,19 +11,26 @@ class ExportPage(BasePage):
     super().__init__(driver)
     self.selectors = selectors
 
-  def export_data(self):
-    try:
-      with self.switch_to_iframe(self.selectors['legado_frame']):
-        self.click(self.selectors['include_button'])
-        # with self.switch_to_iframe(self.selectors['popup_frame']):
-        #  logger.info("Dentro do popup de exportação.")
-      logger.info("Interação no popup concluída, de volta ao iframe principal.")
+  def export_data(self, document_type: str, data_inicial: str, data_final: str):
+      try:
+          with self.switch_to_iframe(self.selectors['legado_frame']):
+              self.click(self.selectors['include_button'])
+              
+              iframe_popup = self.wait_for_element(self.selectors['popup_frame'])
+              self.driver.switch_to.frame(iframe_popup)
+              logger.info("Entrou no iframe do popup.")
 
-    except KeyError as e:
-      logger.error(f"Seletor não encontrado no dicionário de exportação: {e}")
-      raise
-    except Exception as e:
-      logger.error(f"Ocorreu um erro durante a exportação: {e}")
-      raise
-    finally:
-      self.switch_to_default()
+              self.select_option_by_value(self.selectors['document_type_dropdown'], document_type)
+              self.send_keys(self.selectors['start_date_input'], data_inicial)
+              self.send_keys(self.selectors['end_date_input'], data_final)
+              logger.info("Interação no popup concluída.")
+
+              self.switch_to_parent_iframe()
+          logger.info("Processo de exportação dentro do iframe concluído.")
+
+      except KeyError as e:
+          logger.error(f"Seletor não encontrado no dicionário de exportação: {e}")
+          raise
+      except Exception as e:
+          logger.error(f"Ocorreu um erro durante a exportação: {e}")
+          raise
