@@ -5,6 +5,7 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
 from src.utils.exceptions import ElementNotFoundError
 from selenium.webdriver.common.by import By
@@ -36,6 +37,15 @@ class BasePage:
         except TimeoutException:
             logger.error(f"Tempo de espera excedido para o elemento com seletor: '{selector}'")
             raise
+    
+    def wait_for_element_to_disappear(self, selector: str):
+        logger.info(f"Aguardando o elemento com seletor '{selector}' desaparecer.")
+        try:
+            by = self._get_by(selector)
+            self.wait.until(EC.invisibility_of_element_located((by, selector)))
+            logger.info(f"Elemento '{selector}' desapareceu com sucesso.")
+        except TimeoutException:
+            logger.warning(f"Tempo de espera excedido para o desaparecimento do elemento: '{selector}'. Ele pode já ter desaparecido.")
 
     def click(self, selector: str):
         by = self._get_by(selector)
@@ -57,6 +67,37 @@ class BasePage:
             logger.error(f"Falha ao enviar texto para o elemento '{selector}': {e}")
             raise
 
+    def press_key(self, selector: str, key_name: str):
+        key_map = {
+            "ESCAPE": Keys.ESCAPE,
+            "ENTER": Keys.ENTER,
+            "TAB": Keys.TAB,
+        }
+        
+        key_to_press = key_map.get(key_name.upper())
+        
+        if not key_to_press:
+            logger.error(f"A tecla '{key_name}' não é uma tecla especial conhecida no mapeamento.")
+            raise ValueError(f"A tecla '{key_name}' não é uma tecla especial conhecida.")
+
+        logger.info(f"Pressionando a tecla '{key_name}' no elemento com seletor: '{selector}'")
+        try:
+            element = self.wait_for_element(selector)
+            element.send_keys(key_to_press)
+            logger.info(f"Tecla '{key_name}' pressionada com sucesso no elemento '{selector}'.")
+        except Exception as e:
+            logger.error(f"Falha ao pressionar a tecla '{key_name}' no elemento '{selector}': {e}")
+            raise
+
+    def add_text_to_field(self, selector: str, text: str):
+        try:
+            element = self.wait_for_element(selector)
+            element.send_keys(text)
+            logger.info(f"Texto '{text}' adicionado ao elemento com seletor: '{selector}'")
+        except Exception as e:
+            logger.error(f"Falha ao adicionar texto para o elemento '{selector}': {e}")
+            raise
+
     def select_option_by_value(self, selector: str, value: str):
         logger.info(f"Tentando selecionar a opção com valor '{value}' no seletor '{selector}'")
         try:
@@ -69,6 +110,54 @@ class BasePage:
             raise
         except Exception as e:
             logger.error(f"Falha ao selecionar a opção com valor '{value}' no elemento '{selector}': {e}")
+            raise
+
+    def select_option_by_visible_text(self, selector: str, text: str):
+        logger.info(f"Tentando selecionar a opção com o texto visível '{text}' no seletor '{selector}'")
+        try:
+            select_element = self.wait_for_element(selector)
+            select = Select(select_element)
+            select.select_by_visible_text(text)
+            logger.info(f"Opção com o texto '{text}' selecionada com sucesso no seletor '{selector}'")
+        except NoSuchElementException:
+            logger.error(f"Não foi encontrada uma opção com o texto visível '{text}' no elemento '{selector}'.")
+            raise
+        except Exception as e:
+            logger.error(f"Falha ao selecionar a opção com o texto '{text}' no elemento '{selector}': {e}")
+            raise
+    
+    def select_multiple_options_by_value_js(self, selector: str, values: list):
+        logger.info(f"Tentando selecionar múltiplas opções via JS para o seletor '{selector}' com valores: {values}")
+        
+        js_values_array = str(values)
+
+        script = f"""
+            var selectElement = document.querySelector('{selector}');
+            if (!selectElement) {{
+                return 'Elemento select não encontrado com o seletor: {selector}';
+            }}
+            var valuesToSelect = {js_values_array};
+            var options = selectElement.options;
+
+            for (var i = 0; i < options.length; i++) {{
+                options[i].selected = false;
+            }}
+
+            for (var i = 0; i < options.length; i++) {{
+                if (valuesToSelect.includes(options[i].value)) {{
+                    options[i].selected = true;
+                }}
+            }}
+
+            selectElement.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            return 'Seleção concluída com sucesso.';
+        """
+        
+        try:
+            result = self.driver.execute_script(script)
+            logger.info(f"Resultado da execução do script de multiselect: {result}")
+        except Exception as e:
+            logger.error(f"Falha ao executar o script para selecionar múltiplas opções: {e}")
             raise
 
     @contextlib.contextmanager

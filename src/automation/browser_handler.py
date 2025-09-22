@@ -25,6 +25,8 @@ class BrowserHandler:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--window-size=1920,1080")
             chrome_options.add_argument("--disable-gpu") 
+            chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+            chrome_options.add_argument('--log-level=3')
 
         try:
             service = ChromeService(ChromeDriverManager().install())
