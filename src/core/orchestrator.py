@@ -53,7 +53,6 @@ class Orchestrator:
             if not driver:
                 raise ConnectionError("Driver do navegador não foi inicializado.")
 
-            # --- ETAPA DE LOGIN ---
             logger.info("Iniciando processo de login...")
             login_page_selectors = self.selectors.get('login_page', {})
             
@@ -74,7 +73,8 @@ class Orchestrator:
 
             export_page = ExportPage(driver, export_page_selectors)
             export_page.export_data(self.document_type, self.emitter, self.operation_type, self.file_type, self.invoice_situation, self.start_date, self.end_date, self.stores_to_process)
-            
+            export_page.wait_for_export_completion(self.document_type, self.operation_type, self.file_type, self.emitter, self.stores_to_process, self.start_date, self.end_date, settings.GMS_USER_IDENTIFIER)
+
         except AutomationException as e:
             error_message = f"ERRO DE PROCESSO: {e}"
             logger.error(error_message)

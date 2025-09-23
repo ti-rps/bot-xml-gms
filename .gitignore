@@ -18,6 +18,8 @@ __pycache__/
 logs/
 *.log
 downloads/
+pending/
+processed/
 
 # 5. Arquivos de Configuração de IDEs (Editores de Código)
 .vscode/
@@ -35,3 +37,6 @@ Pipfile.lock
 .pytest_cache/
 .coverage
 htmlcov/
+
+# 8. Arquivos de Metadados de Sistema Operacional
+*Zone.Identifier

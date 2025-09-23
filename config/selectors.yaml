@@ -23,3 +23,6 @@ export_page:
   stores_selector: "input[role='listbox']"
   start_date_input: "#dataInicio"
   end_date_input: "#dataFim"
+  export_button: "#btn_salvar"
+  search_button: "#botaoPesquisar"
+  table_rows: "//tr[@role='row']"

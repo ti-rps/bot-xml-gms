@@ -11,6 +11,7 @@ from src.utils.exceptions import ElementNotFoundError
 from selenium.webdriver.common.by import By
 from config import settings
 import contextlib
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,23 @@ class BasePage:
         except NoSuchElementException:
             logger.error(f"Elemento com seletor '{selector}' não encontrado na página.")
             raise
+    
+    def _find_elements(self, selector: str) -> list[WebElement]:
+        """Encontra e retorna uma LISTA de WebElements que correspondem ao seletor."""
+        by = self._get_by(selector)
+        return self.driver.find_elements(by, selector)
+
+    def find_child_element(self, parent_element: WebElement, child_selector: str) -> WebElement:
+        by = self._get_by(child_selector)
+        try:
+            return parent_element.find_element(by, child_selector)
+        except NoSuchElementException:
+            logger.error(f"Elemento filho com seletor '{child_selector}' não encontrado dentro do elemento pai.")
+            raise
+
+    def find_child_elements(self, parent_element: WebElement, child_selector: str) -> list[WebElement]:
+        by = self._get_by(child_selector)
+        return parent_element.find_elements(by, child_selector)
 
     def wait_for_element(self, selector: str) -> WebElement:
         by = self._get_by(selector)
@@ -46,6 +64,18 @@ class BasePage:
             logger.info(f"Elemento '{selector}' desapareceu com sucesso.")
         except TimeoutException:
             logger.warning(f"Tempo de espera excedido para o desaparecimento do elemento: '{selector}'. Ele pode já ter desaparecido.")
+
+    def is_element_present(self, selector: str, timeout: int = 5) -> bool:
+        logger.info(f"Verificando a presença do elemento: '{selector}'")
+        try:
+            short_wait = WebDriverWait(self.driver, timeout)
+            by = self._get_by(selector)
+            short_wait.until(EC.presence_of_element_located((by, selector)))
+            logger.info(f"Elemento '{selector}' está presente.")
+            return True
+        except TimeoutException:
+            logger.info(f"Elemento '{selector}' não foi encontrado no tempo de espera.")
+            return False
 
     def click(self, selector: str):
         by = self._get_by(selector)
@@ -67,11 +97,31 @@ class BasePage:
             logger.error(f"Falha ao enviar texto para o elemento '{selector}': {e}")
             raise
 
+    def add_text_to_field(self, selector: str, text: str):
+        try:
+            element = self.wait_for_element(selector)
+            element.send_keys(text)
+            logger.info(f"Texto '{text}' adicionado ao elemento com seletor: '{selector}'")
+        except Exception as e:
+            logger.error(f"Falha ao adicionar texto para o elemento '{selector}': {e}")
+            raise
+    
+    def normalize_text(texto: str) -> str:
+        if not isinstance(texto, str):
+            return ""
+            
+        upper_text = texto.upper()
+        normalized_text = unicodedata.normalize('NFKD', upper_text)
+        final_text = normalized_text.encode('ASCII', 'ignore').decode('ASCII')
+        
+        return final_text
+
     def press_key(self, selector: str, key_name: str):
         key_map = {
             "ESCAPE": Keys.ESCAPE,
             "ENTER": Keys.ENTER,
             "TAB": Keys.TAB,
+            "HOME": Keys.HOME,
         }
         
         key_to_press = key_map.get(key_name.upper())
@@ -87,15 +137,6 @@ class BasePage:
             logger.info(f"Tecla '{key_name}' pressionada com sucesso no elemento '{selector}'.")
         except Exception as e:
             logger.error(f"Falha ao pressionar a tecla '{key_name}' no elemento '{selector}': {e}")
-            raise
-
-    def add_text_to_field(self, selector: str, text: str):
-        try:
-            element = self.wait_for_element(selector)
-            element.send_keys(text)
-            logger.info(f"Texto '{text}' adicionado ao elemento com seletor: '{selector}'")
-        except Exception as e:
-            logger.error(f"Falha ao adicionar texto para o elemento '{selector}': {e}")
             raise
 
     def select_option_by_value(self, selector: str, value: str):
@@ -176,8 +217,8 @@ class BasePage:
         except Exception as e:
             raise ElementNotFoundError(f"Erro inesperado ao tentar entrar no iframe '{selector}': {e}")
         finally:
-            logger.info("Voltando para o contexto principal")
-            self.driver.switch_to.default_content()
+            logger.info("Voltando para o iframe pai")
+            self.driver.switch_to.parent_frame()
 
 
     def switch_to_parent_iframe(self):
