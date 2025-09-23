@@ -4,19 +4,32 @@ from src.automation.browser_handler import BrowserHandler
 from src.utils import data_handler
 from config import settings
 from src.automation.page_objects.login_page import LoginPage
+from src.automation.page_objects.home_page import HomePage
+from src.automation.page_objects.export_page import ExportPage
+from src.utils.exceptions import AutomationException
 
 logger = logging.getLogger(__name__)
 
 class Orchestrator:
-    def __init__(self, headless: bool = True):
-        self.headless = headless
+    def __init__(self, params: dict):
+        self.headless = params.get('headless', True)
+        self.stores_to_process = params.get('stores', [])
+        self.document_type = params.get('document_type')
+        self.emitter = params.get('emitter')
+        self.operation_type = params.get('operation_type')
+        self.file_type = params.get('file_type')
+        self.invoice_situation = params.get('invoice_situation')
+        self.start_date = params.get('start_date')
+        self.end_date = params.get('end_date')
+        # Mais parâmetros podem ser adicionados conforme necessário
         self.browser_handler = None
-        self.stores_to_process = []
+        self.selectors = None
+    
     def setup(self):
         logger.info("Preparando ambiente para a execução...")
-        self.stores_to_process = data_handler.read_json_file(settings.STORES_DATA_FILE)
+        
         if not self.stores_to_process:
-            logger.warning("Nenhuma loja encontrada para processar.")
+            logger.warning("Nenhuma loja fornecida nos parâmetros para processar.")
             return False
         
         self.selectors = data_handler.load_yaml_file(settings.SELECTORS_FILE)
@@ -27,9 +40,6 @@ class Orchestrator:
         return True
     
     def run(self):
-        """
-        Executa o fluxo principal da automação.
-        """
         logger.info("🚀 --- INICIANDO AUTOMAÇÃO BOT-XML-GMS --- 🚀")
         
         if not self.setup():
@@ -43,7 +53,6 @@ class Orchestrator:
             if not driver:
                 raise ConnectionError("Driver do navegador não foi inicializado.")
 
-            # --- ETAPA DE LOGIN ---
             logger.info("Iniciando processo de login...")
             login_page_selectors = self.selectors.get('login_page', {})
             
@@ -53,10 +62,27 @@ class Orchestrator:
             
             logger.info("Login realizado com sucesso!")
 
-            # --- ETAPAS FUTURAS ---
-            
+            logger.info("Navegando na página inicial...")
+            home_page_selectors = self.selectors.get('home_page', {})
+
+            home_page = HomePage(driver, home_page_selectors)
+            home_page.navigate_sidebar_export()
+
+            logger.info("Iniciando processo de exportação...")
+            export_page_selectors = self.selectors.get('export_page', {})   
+
+            export_page = ExportPage(driver, export_page_selectors)
+            export_page.export_data(self.document_type, self.emitter, self.operation_type, self.file_type, self.invoice_situation, self.start_date, self.end_date, self.stores_to_process)
+            export_page.wait_for_export_completion(self.document_type, self.operation_type, self.file_type, self.emitter, self.stores_to_process, self.start_date, self.end_date, settings.GMS_USER_IDENTIFIER)
+
+        except AutomationException as e:
+            error_message = f"ERRO DE PROCESSO: {e}"
+            logger.error(error_message)
+            raise
         except Exception as e:
-            logger.critical(f"Ocorreu um erro fatal na orquestração: {e}", exc_info=True)
+            error_message = f"ERRO INESPERADO: Ocorreu uma falha crítica na orquestração."
+            logger.critical(error_message, exc_info=True)
+            raise
         finally:
             if self.browser_handler:
                 self.browser_handler.close_browser()
