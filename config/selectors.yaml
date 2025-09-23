@@ -12,6 +12,7 @@ home_page:
 export_page:
   legado_frame: "//iframe[@id='legadoFrame']"
   popup_frame: "//iframe[@id='frameExportacaoDocumento']"
+  popup_header: ".modal-header"
   include_button: "#botaoIncluir"
   document_type_dropdown: "#documentos"
   emitter_dropdown: "#emissor"

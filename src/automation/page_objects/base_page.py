@@ -32,7 +32,6 @@ class BasePage:
             raise
     
     def _find_elements(self, selector: str) -> list[WebElement]:
-        """Encontra e retorna uma LISTA de WebElements que correspondem ao seletor."""
         by = self._get_by(selector)
         return self.driver.find_elements(by, selector)
 
@@ -122,6 +121,7 @@ class BasePage:
             "ENTER": Keys.ENTER,
             "TAB": Keys.TAB,
             "HOME": Keys.HOME,
+            "ESC": Keys.ESCAPE,
         }
         
         key_to_press = key_map.get(key_name.upper())

@@ -50,6 +50,7 @@ class ExportPage(BasePage):
                                 raise
 
                     self.wait_for_element(self.selectors['export_button'])
+                    self.click( self.selectors['popup_header'])
                     self.click(self.selectors['export_button'])
                     logger.info("Interação no popup concluída.")
                     
@@ -63,72 +64,33 @@ class ExportPage(BasePage):
             raise
 
     def wait_for_export_completion(self, document_type: str, operation_type: str, file_type: str, emitter: str, stores_to_process: list, start_date: str, end_date: str, user_identifier: str):
-
-        logger.info("Iniciando monitoramento da tabela de exportação...")
+        logger.info("Iniciando monitoramento da tabela de exportação (verificando apenas a primeira linha)...")
         
-        stores_str = ",".join(map(str, stores_to_process))
-        
-        timeout = time.time() + 60 * 15 
+        timeout = time.time() + 60 * 15
         
         while time.time() < timeout:
             try:
                 with self.switch_to_iframe(self.selectors['legado_frame']):
-                    logger.info("Analisando a tabela de exportação dentro do iframe 'legadoFrame'.")
+                    logger.info("Analisando a primeira linha da tabela de exportação...")
                     
-                    table_rows_selector = self.selectors['table_rows']
+                    first_row_selector = f"({self.selectors['table_rows']})[3]"
                     
-                    if not self.is_element_present(table_rows_selector):
+                    if not self.is_element_present(first_row_selector):
                         logger.info("Nenhuma linha encontrada na tabela ainda. Aguardando...")
                     else:
-                        rows_elements = self._find_elements(table_rows_selector)
-                        num_rows = len(rows_elements)
-                        
-                    if num_rows == 0:
-                        logger.info("Elemento da tabela existe, mas não há linhas. Aguardando...")
-                        continue
-                    
-                    found_row = False
-                    for i in range(1, num_rows + 1):
-                        row_selector = f"({table_rows_selector})[{i}]"
-                        row_element = self.wait_for_element(row_selector)
-                        columns = self.find_child_elements(row_element, "td")
-                        
-                        if len(columns) < 19: continue
+                        first_row_element = self.wait_for_element(first_row_selector)
+                        columns = self.find_child_elements(first_row_element, "td")
 
-                        doc_type_col = self.normalize_text(columns[2].text)
-                        op_type_col = self.normalize_text(columns[3].text)
-                        file_type_col = self.normalize_text(columns[4].text)
-                        emitter_col = self.normalize_text(columns[5].text)
-                        stores_col = self.normalize_text(columns[6].text)
-                        start_date_col = self.normalize_text(columns[7].text)
-                        end_date_col = self.normalize_text(columns[8].text)
-                        user_col = self.normalize_text(columns[17].text)
                         status_col = self.normalize_text(columns[18].text)
+                        logger.info(f"Status encontrado na primeira linha: '{status_col}'")
 
-                        if (doc_type_col == document_type and
-                            op_type_col == operation_type and
-                            file_type_col == file_type and
-                            emitter_col == emitter and
-                            stores_col == stores_str and
-                            start_date_col == start_date and 
-                            end_date_col == end_date and
-                            user_col == user_identifier):
-                            
-                            logger.info(f"Linha da exportação encontrada na posição {i}! Status atual: '{status_col}'")
-                            found_row = True
-                            
-                            if "CONCLUIDO" in status_col:
-                                logger.info("✅ Exportação concluída com sucesso!")
-                                return
-                            
-                            if "ERRO" in status_col:
-                                logger.error("❌ A exportação falhou, status 'Com erro' encontrado na tabela.")
-                                raise Exception("A exportação retornou o status 'Com erro'.")
-                            
-                            break
-                    
-                    if not found_row:
-                        logger.info("Nossa linha de exportação ainda não apareceu ou não corresponde. Verificando novamente...")
+                        if "CONCLUIDO" in status_col:
+                            logger.info("✅ Exportação na primeira linha concluída com sucesso!")
+                            return
+                        
+                        if "ERRO" in status_col:
+                            logger.error("❌ A exportação na primeira linha falhou, status 'Com erro' encontrado na tabela.")
+                            raise Exception("A exportação retornou o status 'Com erro'.")
 
             except Exception as e:
                 logger.error(f"Ocorreu um erro inesperado durante o monitoramento: {e}")
@@ -137,6 +99,8 @@ class ExportPage(BasePage):
             logger.info("Aguardando 30 segundos antes de verificar a tabela novamente...")
             time.sleep(30)
             self.driver.refresh()
-            self.wait_for_element(self.selectors['search_button'])
-            self.click(self.selectors['search_button'])
-        raise TimeoutError("A exportação não foi concluída no tempo limite.")
+            with self.switch_to_iframe(self.selectors['legado_frame']):
+                self.wait_for_element(self.selectors['search_button'])
+                self.click(self.selectors['search_button'])
+                
+        raise TimeoutError("A exportação não foi concluída no tempo limite de 15 minutos.")
