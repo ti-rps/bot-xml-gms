@@ -24,8 +24,8 @@ SELECTORS_FILE = BASE_DIR / "config" / "selectors.yaml"
 
 def create_dirs():
     LOGS_DIR.mkdir(exist_ok=True)
-    PENDING_DIR.mkdir(exist_ok=True)
-    PROCESSED_DIR.mkdir(exist_ok=True)
+    PENDING_DIR.mkdir(parents=True, exist_ok=True)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     DESTINATION_DIR.mkdir(exist_ok=True)
 
 create_dirs()
