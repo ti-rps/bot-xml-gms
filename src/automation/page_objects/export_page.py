@@ -63,7 +63,7 @@ class ExportPage(BasePage):
             logger.error(f"Ocorreu um erro durante a exportação: {e}")
             raise
 
-    def wait_for_export_completion(self, document_type: str, operation_type: str, file_type: str, emitter: str, stores_to_process: list, start_date: str, end_date: str, user_identifier: str):
+    def wait_for_export_completion(self):
         logger.info("Iniciando monitoramento da tabela de exportação (verificando apenas a primeira linha)...")
         
         timeout = time.time() + 60 * 15
@@ -81,9 +81,14 @@ class ExportPage(BasePage):
                         first_row_element = self.wait_for_element(first_row_selector)
                         columns = self.find_child_elements(first_row_element, "td")
 
-                        status_col = self.normalize_text(columns[18].text)
-                        logger.info(f"Status encontrado na primeira linha: '{status_col}'")
+                        logger.info(f"Coluna: '{columns[18].text}'")
 
+                        # status_col = self.normalize_text(columns[18].text)
+                        # logger.info(f"Status encontrado na primeira linha: '{status_col}'")
+
+
+
+                        '''
                         if "CONCLUIDO" in status_col:
                             logger.info("✅ Exportação na primeira linha concluída com sucesso!")
                             return
@@ -91,6 +96,7 @@ class ExportPage(BasePage):
                         if "ERRO" in status_col:
                             logger.error("❌ A exportação na primeira linha falhou, status 'Com erro' encontrado na tabela.")
                             raise Exception("A exportação retornou o status 'Com erro'.")
+                        '''
 
             except Exception as e:
                 logger.error(f"Ocorreu um erro inesperado durante o monitoramento: {e}")
