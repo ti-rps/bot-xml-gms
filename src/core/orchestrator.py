@@ -21,7 +21,6 @@ class Orchestrator:
         self.invoice_situation = params.get('invoice_situation')
         self.start_date = params.get('start_date')
         self.end_date = params.get('end_date')
-        # Mais parâmetros podem ser adicionados conforme necessário
         self.browser_handler = None
         self.selectors = None
     
@@ -73,7 +72,7 @@ class Orchestrator:
 
             export_page = ExportPage(driver, export_page_selectors)
             export_page.export_data(self.document_type, self.emitter, self.operation_type, self.file_type, self.invoice_situation, self.start_date, self.end_date, self.stores_to_process)
-            export_page.wait_for_export_completion(self.document_type, self.operation_type, self.file_type, self.emitter, self.stores_to_process, self.start_date, self.end_date, settings.GMS_USER_IDENTIFIER)
+            export_page.wait_for_export_completion()
 
         except AutomationException as e:
             error_message = f"ERRO DE PROCESSO: {e}"
