@@ -5,9 +5,25 @@ login_page:
   login_button: "[data-cy='login-entrar-button']"
 
 home_page:
-  # Exemplo: Seletor para um menu de usuário que aparece após o login
-  user_menu: "#user-profile-menu"
+  sidebar_tax: "#sidemenu-item-3"
+  sidebar_tax_integration: "#sidemenu-item-51"
+  sidebar_tax_integration_export: "#sidemenu-item-1800"
 
 export_page:
-  # Exemplo: Seletor para o botão de iniciar o download
-  download_button: "button[data-testid='start-download']"
+  legado_frame: "//iframe[@id='legadoFrame']"
+  popup_frame: "//iframe[@id='frameExportacaoDocumento']"
+  popup_header: ".modal-header"
+  include_button: "#botaoIncluir"
+  document_type_dropdown: "#documentos"
+  emitter_dropdown: "#emissor"
+  operation_type_dropdown: "#tipoDeOperacao" 
+  operation_type_span: "#select2-tipoDeOperacao-container"
+  file_type_dropdown: "#tipoArquivo"
+  invoice_situation_dropdown: "#situacaoNota"
+  stores_input: "input[role='listbox']"
+  stores_selector: "input[role='listbox']"
+  start_date_input: "#dataInicio"
+  end_date_input: "#dataFim"
+  export_button: "#btn_salvar"
+  search_button: "#botaoPesquisar"
+  table_rows: "//tr[@role='row']"
