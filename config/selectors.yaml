@@ -27,3 +27,4 @@ export_page:
   export_button: "#btn_salvar"
   search_button: "#botaoPesquisar"
   table_rows: "//tr[@role='row']"
+  download_button: "#baixarDocumentos"

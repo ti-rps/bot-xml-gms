@@ -6,6 +6,7 @@ from config import settings
 from src.automation.page_objects.login_page import LoginPage
 from src.automation.page_objects.home_page import HomePage
 from src.automation.page_objects.export_page import ExportPage
+from src.utils import file_handler
 from src.utils.exceptions import AutomationException
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,10 @@ class Orchestrator:
             export_page = ExportPage(driver, export_page_selectors)
             export_page.export_data(self.document_type, self.emitter, self.operation_type, self.file_type, self.invoice_situation, self.start_date, self.end_date, self.stores_to_process)
             export_page.wait_for_export_completion()
+            export_page.download_exports()
+
+            logger.info("Orquestrador acionando o manipulador de arquivos...")
+            file_handler.process_downloaded_files(self.start_date, self.end_date)
 
         except AutomationException as e:
             error_message = f"ERRO DE PROCESSO: {e}"

@@ -105,6 +105,7 @@ class BasePage:
             logger.error(f"Falha ao adicionar texto para o elemento '{selector}': {e}")
             raise
     
+    @staticmethod
     def normalize_text(texto: str) -> str:
         if not isinstance(texto, str):
             return ""
