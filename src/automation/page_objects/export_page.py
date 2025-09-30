@@ -65,8 +65,8 @@ class ExportPage(BasePage):
 
     def wait_for_export_completion(self):
         logger.info("Iniciando monitoramento da tabela de exportação (verificando apenas a primeira linha)...")
-        
-        timeout = time.time() + 60 * 15
+        minutes = 120
+        timeout = time.time() + 60 * minutes
         
         while time.time() < timeout:
             try:
@@ -80,23 +80,19 @@ class ExportPage(BasePage):
                     else:
                         first_row_element = self.wait_for_element(first_row_selector)
                         columns = self.find_child_elements(first_row_element, "td")
+                        status_col = columns[18].text
+                        logger.info(f"Status atual da exportação: '{status_col}'")
 
-                        logger.info(f"Coluna: '{columns[18].text}'")
-
-                        # status_col = self.normalize_text(columns[18].text)
-                        # logger.info(f"Status encontrado na primeira linha: '{status_col}'")
-
-
-
-                        '''
-                        if "CONCLUIDO" in status_col:
-                            logger.info("✅ Exportação na primeira linha concluída com sucesso!")
+                        if "Concluído" in status_col:
+                            logger.info("✅ Exportação concluída com sucesso!")
                             return
-                        
-                        if "ERRO" in status_col:
-                            logger.error("❌ A exportação na primeira linha falhou, status 'Com erro' encontrado na tabela.")
+                        if "Em processamento" in status_col:
+                            logger.info("⏳ A expostação está em processamento. Continuando a monitorar...")
+                        if "Pendente" in status_col:
+                            logger.info("⏳ A expostação está pendente. Continuando a monitorar...")
+                        if "com Erro" in status_col:
+                            logger.error("❌ A exportação falhou, status 'Com erro' encontrado na tabela.")
                             raise Exception("A exportação retornou o status 'Com erro'.")
-                        '''
 
             except Exception as e:
                 logger.error(f"Ocorreu um erro inesperado durante o monitoramento: {e}")
@@ -109,4 +105,22 @@ class ExportPage(BasePage):
                 self.wait_for_element(self.selectors['search_button'])
                 self.click(self.selectors['search_button'])
                 
-        raise TimeoutError("A exportação não foi concluída no tempo limite de 15 minutos.")
+        raise TimeoutError(f"A exportação não foi concluída no tempo limite de {minutes} minutos.")
+    
+    def download_exports(self):
+        logger.info("Iniciando o download dos arquivos exportados...")
+        try:
+            with self.switch_to_iframe(self.selectors['legado_frame']):
+                first_row_selector = f"({self.selectors['table_rows']})[3]"
+                self.wait_for_element(first_row_selector)
+                self.click(first_row_selector)
+                download_button_selector = self.selectors['download_button']
+                self.wait_for_element(download_button_selector)
+                self.click(download_button_selector)
+                logger.info("Clique no botão de download realizado.")
+                    
+        except Exception as e:
+            logger.error(f"Ocorreu um erro durante o processo de download: {e}")
+            raise
+        logger.info("Processo de download iniciado. Verifique a pasta de downloads do navegador.")
+    

@@ -15,7 +15,6 @@ def execute_automation():
     
     try:
         data = request.get_json()
-        script_path = data['script_path']
         parameters = data['parameters']
     except Exception as e:
         print(f"Erro ao ler o JSON da requisição: {e}")
@@ -26,14 +25,14 @@ def execute_automation():
         params_file_path = temp_file.name
 
     print(f"Parâmetros salvos em: {params_file_path}")
-    print(f"Executando script: {script_path}")
+    print(f"Executando script: Bot-XML-GMS com parâmetros fornecidos...")
 
     log_data = ""
     final_status = "Falha"
 
     try:
         process = subprocess.run(
-            ['python3', script_path, '--params-file', params_file_path],
+            ['python3', "./main.py", '--params-file', params_file_path],
             capture_output=True,
             check=True
         )
