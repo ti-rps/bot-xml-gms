@@ -3,6 +3,7 @@ import time
 import logging
 from selenium.webdriver.remote.webdriver import WebDriver
 from .base_page import BasePage
+from src.utils.exceptions import NoInvoicesFoundException
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,14 @@ class ExportPage(BasePage):
                     self.wait_for_element(self.selectors['export_button'])
                     self.click( self.selectors['popup_header'])
                     self.click(self.selectors['export_button'])
+                    logger.info("Clique no botão de exportar realizado.")
+                    time.sleep(1)
+                    if self.is_element_present(self.selectors['alert_msg'], timeout=3):
+                        alert_element = self._find_element(self.selectors['alert_msg'])
+                        if "Não existem notas a serem exportadas para esse filtro." in alert_element.text:
+                            logger.warning("Nenhuma nota encontrada para os filtros especificados. Encerrando o processo de exportação.")
+                            raise NoInvoicesFoundException("Não existem notas a serem exportadas para o filtro selecionado.")
+
                     logger.info("Interação no popup concluída.")
                     
             logger.info("Processo de exportação dentro do iframe concluído.")
@@ -81,7 +90,6 @@ class ExportPage(BasePage):
                         first_row_element = self.wait_for_element(first_row_selector)
                         columns = self.find_child_elements(first_row_element, "td")
                         status_col = columns[18].text
-                        logger.info(f"Status atual da exportação: '{status_col}'")
 
                         if "Concluído" in status_col:
                             logger.info("✅ Exportação concluída com sucesso!")
