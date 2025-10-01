@@ -25,5 +25,7 @@ export_page:
   start_date_input: "#dataInicio"
   end_date_input: "#dataFim"
   export_button: "#btn_salvar"
+  alert_msg: ".alerta-msg"
   search_button: "#botaoPesquisar"
   table_rows: "//tr[@role='row']"
+  download_button: "#baixarDocumentos"
