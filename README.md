@@ -1,89 +1,156 @@
 # Bot-XML-GMS
 
-Automação para download de arquivos XML, SPED e relatórios contábeis do sistema GMS.
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)
 
-## 🏛️ Arquitetura do Projeto
+`bot-xml-gms` é um projeto de automação robusto projetado para extrair arquivos XML de documentos fiscais (NF-e, NFC-e) de um sistema web GMS. A solução é encapsulada em uma API para facilitar a execução, o monitoramento e a integração com outros sistemas.
 
-Este projeto foi estruturado para separar as responsabilidades em camadas, facilitando a manutenção, o teste e a escalabilidade da automação.
+## ✨ Funcionalidades
 
-/BOT-XML-GMS  
-├── 📂 config/  
-│   ├── __init__.py  
-│   ├── selectors.yaml        # Mapeamento de seletores CSS/XPath  
-│   └── settings.py           # Configurações gerais: URLs, paths, constantes  
-│  
-├── 📂 downloads/  
-│   ├── 📂 pending/             # Arquivos baixados que ainda não foram processados/movidos  
-│   └── 📂 processed/           # Arquivos já processados e organizados  
-│  
-├── 📂 logs/  
-│   └── bot.log                 # Arquivo de log gerado pela execução  
-│  
-├── 📂 src/  
-│   ├── __init__.py  
-│   ├── 📂 core/  
-│   │   ├── __init__.py  
-│   │   └── orchestrator.py     # Orquestra o fluxo principal da automação  
-│   │  
-│   ├── 📂 automation/  
-│   │   ├── __init__.py  
-│   │   ├── browser_handler.py  # Gerencia a instância do navegador (Selenium/Playwright)  
-│   │   └── 📂 page_objects/  
-│   │       ├── __init__.py  
-│   │       ├── base_page.py  
-│   │       ├── login_page.py  
-│   │       ├── home_page.py  
-│   │       └── export_page.py  
-│   │  
-│   └── 📂 utils/  
-│       ├── __init__.py  
-│       ├── file_handler.py     # Funções para mover, renomear, verificar arquivos  
-│       ├── logger_config.py    # Módulo para configurar o sistema de logging  
-│       └── data_handler.py     # Funções para ler dados de entrada (ex: lista de lojas de um CSV)  
-│  
-├── .env                      # Credenciais e variáveis de ambiente (NUNCA versionar)  
-├── .gitignore  
-├── main.py                   # Ponto de entrada da aplicação. Deve ser muito simples.  
-├── requirements.txt          # Dependências do projeto  
-└── README.md                 # Este arquivo  
+* **API de Controle**: Uma API RESTful (criada com FastAPI) para iniciar e monitorar as execuções da automação.
+* **Execução em Background**: As automações rodam como tarefas em segundo plano, permitindo que a API responda imediatamente.
+* **Padrão Page Object Model (POM)**: A interação com o site é modular e fácil de manter.
+* **Configuração Externalizada**: Credenciais, URLs e seletores de elementos são gerenciados fora do código-fonte (`.env`, `.yaml`).
+* **Logging Detalhado**: Logs completos são gerados em console e em arquivos diários para fácil depuração.
+* **Processamento de Arquivos**: O robô lida com o download, descompactação e organização dos arquivos XML em uma estrutura de pastas lógica (`ano/mês/período`).
+* **Resumo da Execução**: Ao final do processo, um resumo em JSON é gerado com estatísticas sobre os documentos extraídos.
 
-## 📄 Descrição dos Componentes
+## 🏗️ Arquitetura
 
-### `main.py` (Ponto de Entrada)
-**Responsabilidade:** Apenas iniciar a aplicação.
-**O que faz:**
-- Configura o logger.
-- Instancia e executa o `Orchestrator`.
+O sistema é dividido em duas partes principais:
 
-### `src/` (Código Fonte)
-A pasta `src` (source) centraliza todo o código da sua aplicação, mantendo a raiz do projeto limpa.
+1.  **Agente (Agent)**: Uma aplicação `FastAPI` que expõe endpoints para controlar o robô.
+2.  **Executor (Executor)**: Um script `Selenium` que é invocado pelo agente para realizar a automação no navegador.
 
-### `src/core/orchestrator.py`
-**Responsabilidade:** O "cérebro" da automação. Define o fluxo de trabalho.
-**O que faz:**
-- Lê a lista de lojas que precisam ser processadas (usando o `data_handler`).
-- Inicia um loop `for loja in lojas:`.
-- Coordena as ações:
-    - Chama o `browser_handler` para iniciar o navegador.
-    - Executa o processo de login usando a `LoginPage`.
-    - Navega para a página de exportação usando a `HomePage`.
-    - Realiza o download dos arquivos usando a `ExportPage`.
-    - Chama o `file_handler` para organizar os arquivos baixados.
-- Controla o fluxo com `try/except` para lidar com erros de uma loja específica sem parar o robô inteiro.
+O fluxo de execução é o seguinte:
+`Usuário/Sistema -> Requisição API -> Agente (agent.py) -> Inicia Subprocesso (main.py) -> Robô Selenium -> Interage com Sistema GMS -> Processa Arquivos`
 
-### `src/automation/browser_handler.py`
-**Responsabilidade:** Gerenciar o ciclo de vida do navegador.
-**O que faz:**
-- Inicia a instância do driver (Selenium, Playwright).
-- Configura opções do navegador (headless, diretório de download, user-agent).
-- Fornece o objeto `driver` para os page_objects.
-- Fecha o navegador de forma segura no final.
+## ⚙️ Pré-requisitos
 
-### `src/automation/page_objects/`
-**Responsabilidade:** Mapear páginas e seus elementos, e encapsular as interações.
-**O que faz:** Cada classe (ex: `LoginPage`) representa uma página e contém métodos para interagir com ela (ex: `fazer_login(usuario, senha)`, `clicar_botao_entrar()`). Eles recebem o `driver` do `browser_handler`.
+* **Python 3.9** ou superior.
+* **Google Chrome** instalado.
+* Acesso ao sistema GMS.
 
-### `src/utils/`
-- **`file_handler.py`**: Funções como `mover_para_pasta_da_loja`, `renomear_relatorio`, `verificar_download_concluido`.
-- **`logger_config.py`**: Uma função `setup_logger()` que configura o formato, nível (INFO, DEBUG) e local do arquivo de log.
-- **`data_handler.py`**: Funções para ler dados de entrada. É muito melhor ler a lista de lojas de um arquivo `.csv` ou `.xlsx` do que deixá-la "hardcoded" no código. Ex: `ler_lojas_de_csv()`.
+## 🚀 Instalação e Configuração
+
+1.  **Clone o repositório:**
+    ```bash
+    git clone https://seu-repositorio/bot-xml-gms.git
+    cd bot-xml-gms
+    ```
+
+2.  **Crie e ative um ambiente virtual (Recomendado):**
+    ```bash
+    python -m venv venv
+    # Windows
+    .\venv\Scripts\activate
+    # Linux / macOS
+    source venv/bin/activate
+    ```
+
+3.  **Instale as dependências:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+4.  **Configure as variáveis de ambiente:**
+    Crie um arquivo chamado `.env` na raiz do projeto, copiando o exemplo de `.env.example`.
+
+    `.env.example`:
+    ```ini
+    GMS_LOGIN_URL="[https://url.do.seu.sistema.gms/login](https://url.do.seu.sistema.gms/login)"
+    GMS_USER="seu_usuario"
+    GMS_PASSWORD="sua_senha"
+    ```
+
+    Preencha o arquivo `.env` com suas credenciais e a URL correta.
+
+5.  **Configure os Seletores:**
+    Abra o arquivo `config/selectors.yaml` e preencha com os seletores CSS ou XPath corretos para os elementos da interface do sistema GMS.
+
+## ▶️ Como Usar
+
+### 1. Iniciar o Agente da API
+
+Com o ambiente virtual ativado, execute o seguinte comando na raiz do projeto:
+
+```bash
+uvicorn agent:app --reload
+```
+
+O servidor da API estará rodando em `http://127.0.0.1:8000`.
+
+### 2. Acessar a Documentação da API
+
+Acesse [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) no seu navegador para ver a documentação interativa da API (gerada automaticamente pelo FastAPI/Swagger).
+
+### 3. Iniciar uma Execução
+
+Envie uma requisição `POST` para o endpoint `/execute` com os parâmetros da automação no corpo da requisição.
+
+**Exemplo usando `curl`:**
+```bash
+curl -X POST "[http://127.0.0.1:8000/execute](http://127.0.0.1:8000/execute)" -H "Content-Type: application/json" -d \
+'{
+  "parameters": {
+    "headless": true,
+    "stores": [1, 5, 10],
+    "document_type": "55",
+    "emitter": "1",
+    "operation_type": "T",
+    "file_type": "0",
+    "invoice_situation": "T",
+    "start_date": "01/10/2025",
+    "end_date": "01/10/2025",
+    "gms_user": "seu_usuario_api",
+    "gms_password": "sua_senha_api",
+    "gms_login_url": "[https://url.do.seu.sistema.gms/login](https://url.do.seu.sistema.gms/login)"
+  }
+}'
+```
+
+A resposta será um JSON com o `job_id` da execução:
+```json
+{
+  "job_id": "a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6",
+  "message": "Execução da automação iniciada."
+}
+```
+
+### 4. Verificar o Status da Execução
+
+Envie uma requisição `GET` para o endpoint `/status/{job_id}`, substituindo `{job_id}` pelo ID retornado no passo anterior.
+
+**Exemplo usando `curl`:**
+```bash
+curl -X GET "[http://127.0.0.1:8000/status/a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6](http://127.0.0.1:8000/status/a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6)"
+```
+
+A resposta mostrará o status atual (`pendente`, `rodando`, `concluído`, `falhou`), logs e o resumo final quando a execução terminar.
+
+## 📂 Estrutura do Projeto
+
+```
+.  
+├── agent.py              # Servidor da API (FastAPI) 
+├── main.py               # Ponto de entrada para o robô de automação  
+├── requirements.txt      # Dependências do projeto  
+├── .env                  # Arquivo de variáveis de ambiente (local)  
+├── config/  
+│   ├── settings.py       # Configurações centrais e criação de pastas  
+│   └── selectors.yaml    # Seletores de elementos da interface  
+├── downloads/  
+│   ├── pending/          # Pasta temporária para arquivos baixados  
+│   └── processed/        # Destino final dos arquivos XML organizados  
+├── logs/                 # Arquivos de log da execução  
+└── src/  
+    ├── automation/  
+    │   ├── browser_handler.py  
+    │   └── page_objects/ # Padrão Page Object Model  
+    ├── core/  
+    │   └── orchestrator.py # Orquestra o fluxo da automação  
+    └── utils/  
+        ├── data_handler.py  
+        ├── exceptions.py  
+        ├── file_handler.py  
+        └── logger_config.py  
+```

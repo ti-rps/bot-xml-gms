@@ -22,6 +22,9 @@ class Orchestrator:
         self.invoice_situation = params.get('invoice_situation')
         self.start_date = params.get('start_date')
         self.end_date = params.get('end_date')
+        self.gms_user = params.get('gms_user')
+        self.gms_password = params.get('gms_password')
+        self.gms_login_url = params.get('gms_login_url')
         self.browser_handler = None
         self.selectors = None
     
@@ -57,8 +60,8 @@ class Orchestrator:
             login_page_selectors = self.selectors.get('login_page', {})
             
             login_page = LoginPage(driver, login_page_selectors)
-            login_page.navigate_to_login_page()
-            login_page.execute_login(settings.GMS_USER, settings.GMS_PASSWORD)
+            login_page.navigate_to_login_page(self.gms_login_url)
+            login_page.execute_login(self.gms_user, self.gms_password)
             
             logger.info("Login realizado com sucesso!")
 

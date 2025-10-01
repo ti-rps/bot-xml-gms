@@ -2,7 +2,6 @@ import logging
 import time
 from selenium.webdriver.remote.webdriver import WebDriver
 from .base_page import BasePage
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -10,11 +9,10 @@ class LoginPage(BasePage):
     def __init__(self, driver: WebDriver, selectors: dict):
         super().__init__(driver)
         self.selectors = selectors
-        self.login_url = settings.LOGIN_URL
 
-    def navigate_to_login_page(self):
-        logger.info(f"Navegando para a página de login: {self.login_url}")
-        self.driver.get(self.login_url)
+    def navigate_to_login_page(self, login_url):
+        logger.info(f"Navegando para a página de login: {login_url}")
+        self.driver.get(login_url)
 
     def execute_login(self, username, password):
         try:
