@@ -1,3 +1,5 @@
+# src/utils/exceptions.py
+
 class AutomationException(Exception):
     """Classe base para exceções customizadas da automação."""
     pass
@@ -16,4 +18,8 @@ class DataExportError(AutomationException):
 
 class ElementNotFoundError(AutomationException):
     """Lançada quando um elemento crucial não é encontrado na página."""
+    pass
+
+class NoInvoicesFoundException(Exception):
+    """Exceção levantada quando nenhuma nota fiscal é encontrada para os filtros de exportação."""
     pass
