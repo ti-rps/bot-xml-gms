@@ -1,3 +1,4 @@
+# src/core/bot_runner.py
 import logging
 from src.automation.browser_handler import BrowserHandler
 from src.utils import data_handler
@@ -10,7 +11,7 @@ from src.utils.exceptions import AutomationException, NoInvoicesFoundException
 
 logger = logging.getLogger(__name__)
 
-class Orchestrator:
+class BotRunner:
     def __init__(self, params: dict):
         self.headless = params.get('headless', True)
         self.stores_to_process = params.get('stores', [])

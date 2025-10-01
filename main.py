@@ -3,7 +3,7 @@ import sys
 import argparse
 import json
 import signal
-from src.core.orchestrator import Orchestrator
+from src.core.bot_runner import BotRunner
 from src.utils.logger_config import setup_logger
 
 def load_execution_parameters(params_file_path):
@@ -35,8 +35,8 @@ def main():
 
     summary = None
     try:
-        orchestrator = Orchestrator(params=execution_params)
-        summary = orchestrator.run()
+        bot_runner = BotRunner(params=execution_params)
+        summary = bot_runner.run()
     except Exception as e:
         logging.critical(f"Erro inesperado na execução principal: {e}", exc_info=True)
         sys.exit(1)

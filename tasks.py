@@ -1,11 +1,10 @@
-#tasks.py
 import subprocess
 import json
 import tempfile
 import os
-import traceback
 import time
 from celery import Celery
+from celery.exceptions import Terminated
 
 celery_app = Celery(
     'tasks',
@@ -25,20 +24,14 @@ def run_automation_task(self, params: dict):
     process = None
     try:
         process = subprocess.Popen(
-            ['python3', "main.py", '--params-file', params_file_path],
+            ['python3', "-u", "main.py", '--params-file', params_file_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True, 
+            text=True,
             encoding='utf-8'
         )
 
         while process.poll() is None:
-            if self.is_revoked():
-                print(f"CANCELAMENTO SOLICITADO PARA A TAREFA {self.request.id}! Encerrando o subprocesso...")
-                process.terminate()
-                process.wait(timeout=10)
-                raise Exception("Tarefa cancelada pelo usuário.")
-            
             time.sleep(1)
 
         stdout, stderr = process.communicate()
@@ -58,6 +51,13 @@ def run_automation_task(self, params: dict):
             "summary": summary,
             "log": log_data
         }
+
+    except Terminated:
+        print(f"TAREFA {self.request.id} FOI CANCELADA! Encerrando o subprocesso...")
+        if process and process.poll() is None:
+            process.terminate()
+            process.wait(timeout=10)
+        raise
 
     except subprocess.CalledProcessError as e:
         log_data = f"--- STDOUT ---\n{e.stdout}\n\n--- STDERR ---\n{e.stderr}"
