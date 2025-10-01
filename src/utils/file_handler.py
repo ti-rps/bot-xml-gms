@@ -1,12 +1,117 @@
-# src/utils/file_handler.py
 import logging
 import time
 import zipfile
 import shutil
+import json
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from collections import defaultdict
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+def analyze_xml_files_and_log_summary(directory: Path):
+    logger.info(f"🔎 Iniciando análise dos arquivos XML em '{directory}'...")
+    
+    xml_files = list(directory.rglob('*.xml'))
+
+    if not xml_files:
+        logger.warning("Nenhum arquivo XML encontrado para análise.")
+        return
+
+    stats = defaultdict(int)
+    lojas = {}
+    xml_dates = set()
+    
+    ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
+
+    for xml_file in xml_files:
+        stats['total_xml'] += 1
+        try:
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+            
+            infNFe = root.find('.//nfe:infNFe', ns)
+            if infNFe is None:
+                logger.warning(f"Não foi possível encontrar a tag 'infNFe' no arquivo: {xml_file.name}")
+                continue
+
+            ide = infNFe.find('nfe:ide', ns)
+            emit = infNFe.find('nfe:emit', ns)
+
+            if ide is not None:
+                mod_element = ide.find('nfe:mod', ns)
+                if mod_element is not None:
+                    mod = mod_element.text.strip()
+                    if mod == '55': stats['nfe'] += 1
+                    elif mod == '65': stats['nfce'] += 1
+                
+                tpNF_element = ide.find('nfe:tpNF', ns)
+                if tpNF_element is not None:
+                    tpNF = tpNF_element.text
+                    if tpNF == '0': stats['entrada'] += 1
+                    elif tpNF == '1': stats['saida'] += 1
+                
+                dhEmi_element = ide.find('nfe:dhEmi', ns)
+                if dhEmi_element is not None:
+                    xml_dates.add(dhEmi_element.text.split('T')[0])
+            
+            if emit is not None:
+                cnpj_element = emit.find('nfe:CNPJ', ns)
+                nome_loja_element = emit.find('nfe:xNome', ns)
+                if cnpj_element is not None and nome_loja_element is not None:
+                    cnpj, nome_loja = cnpj_element.text, nome_loja_element.text
+                    if cnpj not in lojas:
+                        lojas[cnpj] = nome_loja
+
+        except ET.ParseError:
+            logger.error(f"Erro de parsing no XML '{xml_file.name}'. O arquivo pode estar corrompido.")
+        except Exception as e:
+            logger.error(f"Erro inesperado ao processar o arquivo '{xml_file.name}': {e}")
+
+    sorted_dates_list = sorted(list(xml_dates))
+    log_message = (
+        f"\n\n{'='*50}\n"
+        f"📊 --- RESUMO DA EXTRAÇÃO DE DOCUMENTOS FISCAIS --- 📊\n"
+        f"{'='*50}\n"
+        f"Total de arquivos XML analisados: {stats['total_xml']}\n"
+        f"Total de NF-e/NFC-e válidas encontradas: {stats['nfe'] + stats['nfce']}\n"
+        f"\n--- Tipos de Documento ---\n"
+        f"  - NF-e (Modelo 55): {stats['nfe']}\n"
+        f"  - NFC-e (Modelo 65): {stats['nfce']}\n"
+        f"\n--- Natureza da Operação ---\n"
+        f"  - Notas de Saída: {stats['saida']}\n"
+        f"  - Notas de Entrada: {stats['entrada']}\n"
+    )
+    if sorted_dates_list:
+        log_message += "\n--- Período dos Documentos (Datas de Emissão) ---\n"
+        for date in sorted_dates_list:
+            log_message += f"  - {date}\n"
+    if lojas:
+        log_message += "\n--- Lojas (Emitentes) Encontradas ---\n"
+        for cnpj, nome in lojas.items():
+            log_message += f"  - {nome} (CNPJ: {cnpj})\n"
+    log_message += f"{'='*50}\n"
+    logger.info(log_message)
+
+    summary_data = {
+        "total_xml_files_analyzed": stats['total_xml'],
+        "valid_invoices_found": stats['nfe'] + stats['nfce'],
+        "document_types": {
+            "nfe_model_55": stats['nfe'],
+            "nfce_model_65": stats['nfce']
+        },
+        "operation_nature": {
+            "exit_notes": stats['saida'],
+            "entry_notes": stats['entrada']
+        },
+        "period_of_documents": sorted_dates_list,
+        "stores_found": [{"cnpj": cnpj, "name": nome} for cnpj, nome in lojas.items()]
+    }
+    
+    print("\n---SUMMARY_START---")
+    print(json.dumps(summary_data, indent=4, ensure_ascii=False))
+    print("---SUMMARY_END---")
 
 def wait_for_file(file_path: Path, timeout_seconds: int = 300):
     logger.info(f"Aguardando o arquivo: {file_path.name}...")
@@ -29,69 +134,111 @@ def process_downloaded_files(start_date: str, end_date: str):
 
     pending_dir = settings.PENDING_DIR
     processed_dir = settings.PROCESSED_DIR
-
     initial_zip_path = pending_dir / "documentos_eletronicos.zip"
-    first_extract_folder = pending_dir / "documentos_eletronicos"
-
+    
+    second_zip_path = None
+    second_extract_folder = None
+    operation_successful = False
+    final_destination_path = None
+    
     try:
         wait_for_file(initial_zip_path)
 
         logger.info(f"Descompactando '{initial_zip_path.name}'...")
         with zipfile.ZipFile(initial_zip_path, 'r') as zip_ref:
             zip_ref.extractall(pending_dir)
-  
-        logger.info("Aguardando a criação do arquivo ZIP interno após a extração...")
         
+        logger.info("Procurando o segundo arquivo ZIP no diretório 'pending'...")
         timeout = time.time() + 60
-        second_zip_path = None
-        
         while time.time() < timeout:
-            inner_zip_files = list(first_extract_folder.glob('*.zip'))
+            inner_zip_files = [p for p in pending_dir.glob('*.zip') if p.resolve() != initial_zip_path.resolve()]
             if inner_zip_files:
-                if wait_for_file(inner_zip_files[0], timeout_seconds=30):
-                    second_zip_path = inner_zip_files[0]
+                potential_zip = inner_zip_files[0]
+                if wait_for_file(potential_zip, timeout_seconds=30):
+                    second_zip_path = potential_zip
+                    logger.info(f"Segundo arquivo ZIP encontrado: '{second_zip_path.name}'")
                     break
-            time.sleep(1)
+            time.sleep(2)
         
         if not second_zip_path:
-            raise FileNotFoundError("Nenhum arquivo ZIP foi encontrado dentro de 'documentos_eletronicos' após a extração.")
+            raise FileNotFoundError("Nenhum arquivo ZIP secundário foi encontrado em 'pending' após a primeira extração.")
 
-        second_extract_folder = first_extract_folder / second_zip_path.stem
+        second_extract_folder = pending_dir / second_zip_path.stem
         
         logger.info(f"Descompactando '{second_zip_path.name}' para '{second_extract_folder}'...")
         with zipfile.ZipFile(second_zip_path, 'r') as zip_ref:
             zip_ref.extractall(second_extract_folder)
+        
+        logger.info("Iniciando busca profunda pela pasta que contém os documentos...")
+        traversal_path = second_extract_folder
+        source_folders_parent = None
+        for _ in range(10):
+            subdirectories = [item for item in traversal_path.iterdir() if item.is_dir()]
+            if len(subdirectories) == 1:
+                traversal_path = subdirectories[0]
+                logger.info(f"Navegando para a subpasta: {traversal_path.name}")
+            else:
+                source_folders_parent = traversal_path
+                logger.info(f"Pasta-mãe contendo os documentos encontrada: '{source_folders_parent}'")
+                break
+        
+        if not source_folders_parent:
+            raise FileNotFoundError("Não foi possível localizar a pasta de origem dos documentos. Estrutura de pastas inesperada.")
 
-        docs_fiscais_path = second_extract_folder / "docs-fiscais"
-        subfolders = [p for p in docs_fiscais_path.iterdir() if p.is_dir()]
-        if not subfolders:
-            raise FileNotFoundError("Nenhuma subpasta encontrada dentro de 'docs-fiscais'.")
+        folders_to_move = [d for d in source_folders_parent.iterdir() if d.is_dir()]
 
-        final_source_path = subfolders[0]
-        logger.info(f"Arquivos de origem encontrados em: '{final_source_path}'")
+        try:
+            day, month, year = start_date.split('/')
+        except ValueError:
+            logger.error(f"Formato de data inválido: '{start_date}'. Usando estrutura padrão.")
+            year, month = "ANO_INVALIDO", "MES_INVALIDO"
 
         start_date_fmt = start_date.replace('/', '-')
         end_date_fmt = end_date.replace('/', '-')
-        destination_folder_name = f"{start_date_fmt} a {end_date_fmt}"
-        final_destination_path = processed_dir / destination_folder_name
+
+        destination_folder_name = start_date_fmt if start_date_fmt == end_date_fmt else f"{start_date_fmt} a {end_date_fmt}"
+
+        month_folder = f"{month}-{year}"
+
+        final_destination_path = processed_dir / year / month_folder / destination_folder_name
+
+        if final_destination_path.exists() and final_destination_path.is_dir():
+            logger.warning(f"O diretório de destino '{final_destination_path}' já existe. Removendo-o...")
+            shutil.rmtree(final_destination_path)
 
         final_destination_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Diretório de destino criado/verificado: '{final_destination_path}'")
-
-        files_to_move = list(final_source_path.glob('*.*'))
-        logger.info(f"Movendo {len(files_to_move)} arquivos para o destino final...")
-        for file in files_to_move:
-            shutil.move(str(file), str(final_destination_path))
-
-        logger.info("✅ Arquivos movidos com sucesso!")
+        
+        if not folders_to_move:
+            logger.warning("A pasta de origem está vazia. Nenhuma pasta para mover.")
+            operation_successful = True
+        else:
+            logger.info(f"Movendo {len(folders_to_move)} pastas para o destino final...")
+            for folder in folders_to_move:
+                destination_for_folder = final_destination_path / folder.name
+                shutil.move(str(folder), str(destination_for_folder))
+            logger.info("✅ Pastas movidas com sucesso!")
+            operation_successful = True
 
     except Exception as e:
         logger.critical(f"❌ Falha crítica durante o processamento de arquivos: {e}", exc_info=True)
+        operation_successful = False
         raise
     finally:
-        logger.info("Realizando limpeza do diretório 'pending'...")
-        if initial_zip_path.exists():
-            initial_zip_path.unlink()
-        if first_extract_folder.exists():
-            shutil.rmtree(first_extract_folder)
-        logger.info("Limpeza concluída.")
+        if operation_successful:
+            if final_destination_path and final_destination_path.exists():
+                analyze_xml_files_and_log_summary(final_destination_path)
+
+            logger.info("Operação bem-sucedida. Realizando limpeza do diretório 'pending'...")
+            if initial_zip_path and initial_zip_path.exists():
+                initial_zip_path.unlink()
+                logger.info(f"Removido: {initial_zip_path.name}")
+            if second_zip_path and second_zip_path.exists():
+                second_zip_path.unlink()
+                logger.info(f"Removido: {second_zip_path.name}")
+            if second_extract_folder and second_extract_folder.exists():
+                shutil.rmtree(second_extract_folder)
+                logger.info(f"Removido diretório: {second_extract_folder.name}")
+            logger.info("Limpeza concluída.")
+        else:
+            logger.warning("A operação falhou. Nenhum arquivo temporário será removido de 'pending' para permitir análise manual.")

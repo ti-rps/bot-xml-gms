@@ -7,7 +7,7 @@ from src.automation.page_objects.login_page import LoginPage
 from src.automation.page_objects.home_page import HomePage
 from src.automation.page_objects.export_page import ExportPage
 from src.utils import file_handler
-from src.utils.exceptions import AutomationException
+from src.utils.exceptions import AutomationException, NoInvoicesFoundException
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,9 @@ class Orchestrator:
 
             logger.info("Orquestrador acionando o manipulador de arquivos...")
             file_handler.process_downloaded_files(self.start_date, self.end_date)
+
+        except NoInvoicesFoundException as e:
+            logger.warning(f"Processo encerrado conforme esperado: {e}")
 
         except AutomationException as e:
             error_message = f"ERRO DE PROCESSO: {e}"
