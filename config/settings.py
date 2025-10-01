@@ -4,11 +4,6 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-LOGIN_URL = os.getenv("GMS_LOGIN_URL")
-GMS_USER = os.getenv("GMS_USER")
-GMS_PASSWORD = os.getenv("GMS_PASSWORD")
-GMS_USER_IDENTIFIER = os.getenv("GMS_USER_IDENTIFIER")
-
 LOGS_DIR = BASE_DIR / "logs"
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 PENDING_DIR = DOWNLOADS_DIR / "pending"

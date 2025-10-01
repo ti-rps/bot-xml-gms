@@ -1,9 +1,7 @@
-# src/automation/browser_handler.py
 import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
-from webdriver_manager.chrome import ChromeDriverManager
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -20,6 +18,9 @@ class BrowserHandler:
         
         prefs = {"download.default_directory": str(settings.PENDING_DIR)}
         chrome_options.add_experimental_option("prefs", prefs)
+
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
         
         if self.headless:
             chrome_options.add_argument("--headless")
@@ -29,7 +30,7 @@ class BrowserHandler:
             chrome_options.add_argument('--log-level=3')
 
         try:
-            service = ChromeService(ChromeDriverManager().install())
+            service = ChromeService(executable_path="/usr/local/bin/chromedriver")
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             logger.info("Navegador iniciado com sucesso.")
             return self.driver
@@ -39,6 +40,7 @@ class BrowserHandler:
             return None
 
     def close_browser(self):
+        # ... (sem mudanças aqui)
         if self.driver:
             logger.info("Fechando o navegador.")
             self.driver.quit()
