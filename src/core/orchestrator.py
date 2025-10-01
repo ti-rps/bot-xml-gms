@@ -1,4 +1,3 @@
-# src/core/orchestrator.py
 import logging
 from src.automation.browser_handler import BrowserHandler
 from src.utils import data_handler
@@ -47,53 +46,46 @@ class Orchestrator:
         
         if not self.setup():
             logger.info("🏁 --- AUTOMAÇÃO FINALIZADA DEVIDO A FALHA NO SETUP --- 🏁")
-            return
+            return None
 
         self.browser_handler = BrowserHandler(headless=self.headless)
-        
+        summary = None
         try:
             driver = self.browser_handler.start_browser()
             if not driver:
                 raise ConnectionError("Driver do navegador não foi inicializado.")
 
             logger.info("Iniciando processo de login...")
-            login_page_selectors = self.selectors.get('login_page', {})
-            
-            login_page = LoginPage(driver, login_page_selectors)
+            login_page = LoginPage(driver, self.selectors.get('login_page', {}))
             login_page.navigate_to_login_page(self.gms_login_url)
             login_page.execute_login(self.gms_user, self.gms_password)
-            
             logger.info("Login realizado com sucesso!")
 
             logger.info("Navegando na página inicial...")
-            home_page_selectors = self.selectors.get('home_page', {})
-
-            home_page = HomePage(driver, home_page_selectors)
+            home_page = HomePage(driver, self.selectors.get('home_page', {}))
             home_page.navigate_sidebar_export()
 
             logger.info("Iniciando processo de exportação...")
-            export_page_selectors = self.selectors.get('export_page', {})   
-
-            export_page = ExportPage(driver, export_page_selectors)
+            export_page = ExportPage(driver, self.selectors.get('export_page', {}))
             export_page.export_data(self.document_type, self.emitter, self.operation_type, self.file_type, self.invoice_situation, self.start_date, self.end_date, self.stores_to_process)
             export_page.wait_for_export_completion()
             export_page.download_exports()
 
             logger.info("Orquestrador acionando o manipulador de arquivos...")
-            file_handler.process_downloaded_files(self.start_date, self.end_date)
+            summary = file_handler.process_downloaded_files(self.document_type, self.start_date, self.end_date)
 
         except NoInvoicesFoundException as e:
             logger.warning(f"Processo encerrado conforme esperado: {e}")
+            summary = {"status": "concluido_sem_notas", "message": str(e)}
 
         except AutomationException as e:
-            error_message = f"ERRO DE PROCESSO: {e}"
-            logger.error(error_message)
+            logger.error(f"ERRO DE PROCESSO: {e}", exc_info=True)
             raise
-        except Exception as e:
-            error_message = f"ERRO INESPERADO: Ocorreu uma falha crítica na orquestração."
-            logger.critical(error_message, exc_info=True)
+        except Exception:
+            logger.critical("ERRO INESPERADO: Ocorreu uma falha crítica na orquestração.", exc_info=True)
             raise
         finally:
             if self.browser_handler:
                 self.browser_handler.close_browser()
             logger.info("🏁 --- AUTOMAÇÃO FINALIZADA --- 🏁")
+            return summary

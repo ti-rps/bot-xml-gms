@@ -1,14 +1,8 @@
-# Arquivo: requirements.txt
-
-# --- Dependências da API ---
 fastapi==0.118.0
 uvicorn==0.37.0
-pydantic==2.11.9
-
-# --- Dependências da Automação Web ---
+celery==5.5.3
+redis==5.2.1
 selenium==4.35.0
 webdriver-manager==4.0.2
-
-# --- Utilitários e Configuração ---
 python-dotenv==1.0.0
 PyYAML==6.0.2

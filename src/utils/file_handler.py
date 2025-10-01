@@ -113,6 +113,8 @@ def analyze_xml_files_and_log_summary(directory: Path):
     print(json.dumps(summary_data, indent=4, ensure_ascii=False))
     print("---SUMMARY_END---")
 
+    return summary_data 
+
 def wait_for_file(file_path: Path, timeout_seconds: int = 300):
     logger.info(f"Aguardando o arquivo: {file_path.name}...")
     timeout = time.time() + timeout_seconds
@@ -129,7 +131,8 @@ def wait_for_file(file_path: Path, timeout_seconds: int = 300):
 
     raise TimeoutError(f"O arquivo '{file_path.name}' não foi encontrado ou não estabilizou no tempo limite de {timeout_seconds} segundos.")
 
-def process_downloaded_files(start_date: str, end_date: str):
+def process_downloaded_files(document_type: str, start_date: str, end_date: str):
+    summary = None
     logger.info("🚀 Iniciando o processo de tratamento dos arquivos baixados...")
 
     pending_dir = settings.PENDING_DIR
@@ -200,7 +203,7 @@ def process_downloaded_files(start_date: str, end_date: str):
 
         month_folder = f"{month}-{year}"
 
-        final_destination_path = processed_dir / year / month_folder / destination_folder_name
+        final_destination_path = processed_dir / document_type.upper() / year / month_folder / destination_folder_name
 
         if final_destination_path.exists() and final_destination_path.is_dir():
             logger.warning(f"O diretório de destino '{final_destination_path}' já existe. Removendo-o...")
@@ -240,5 +243,6 @@ def process_downloaded_files(start_date: str, end_date: str):
                 shutil.rmtree(second_extract_folder)
                 logger.info(f"Removido diretório: {second_extract_folder.name}")
             logger.info("Limpeza concluída.")
+            return summary 
         else:
             logger.warning("A operação falhou. Nenhum arquivo temporário será removido de 'pending' para permitir análise manual.")
