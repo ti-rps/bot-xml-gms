@@ -1,37 +1,41 @@
-# docker-compose.yml
+# docker-compose.prod.yml
+# Configuração para o ambiente de produção no servidor
+
+version: '3.8'
+
 services:
   redis:
     image: "redis:alpine"
-    ports:
-      - "6379:6379"
 
   api:
     build: .
     command: uvicorn api:app --host 0.0.0.0 --port 8000
     volumes:
-      - ./downloads:/app/downloads
-      - ./logs:/app/logs
+      - bot-logs:/app/logs
     ports:
       - "8000:8000"
     depends_on:
       - redis
     environment:
-      - LOG_ENV=development
+      - LOG_ENV=production
       - PYTHONUNBUFFERED=1
 
   worker:
     build: .
     command: celery -A tasks worker --loglevel=info
     volumes:
-      - ./downloads/pending:/app/downloads/pending
-
-      - '/mnt/c/botDownloads/bot-xml-gms:/app/downloads/processed'
-
-      - ./logs:/app/logs
+      - bot-pending-downloads:/app/downloads/pending
+      - bot-processed-downloads:/app/downloads/processed
+      - bot-logs:/app/logs
     depends_on:
       - redis
     environment:
-      - LOG_ENV=development
+      - LOG_ENV=production
       - PYTHONUNBUFFERED=1
       - GMS_USER=${GMS_USER}
       - GMS_PASSWORD=${GMS_PASSWORD}
+
+volumes:
+  bot-logs:
+  bot-pending-downloads:
+  bot-processed-downloads:

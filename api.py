@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from tasks import celery_app, run_automation_task
 from celery.result import AsyncResult
 import time
@@ -18,9 +18,9 @@ class AutomationParameters(BaseModel):
     invoice_situation: str
     start_date: str 
     end_date: str
-    gms_user: str
-    gms_password: str
     gms_login_url: str
+    gms_user: Optional[str] = None
+    gms_password: Optional[str] = None
 
 app = FastAPI(
     title="Bot-XML-GMS API",
