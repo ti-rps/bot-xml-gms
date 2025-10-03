@@ -12,7 +12,7 @@ from src.utils.exceptions import AutomationException, NoInvoicesFoundException
 logger = logging.getLogger(__name__)
 
 class BotRunner:
-    def __init__(self, params: dict):
+    def __init__(self, params: dict, task=None):
         self.headless = params.get('headless', True)
         self.stores_to_process = params.get('stores', [])
         self.document_type = params.get('document_type')
@@ -27,9 +27,15 @@ class BotRunner:
         self.gms_login_url = params.get('gms_login_url')
         self.browser_handler = None
         self.selectors = None
-    
+        self.task = task
+        
+    def _update_status(self, message: str):
+        if self.task:
+            self.task.update_state(state='PROGRESS', meta={'status': message})
+        logger.info(message)
+
     def setup(self):
-        logger.info("Preparando ambiente para a execução...")
+        self._update_status("Preparando ambiente para a execução...")
         
         if not self.stores_to_process:
             logger.warning("Nenhuma loja fornecida nos parâmetros para processar.")
@@ -52,28 +58,34 @@ class BotRunner:
         self.browser_handler = BrowserHandler(headless=self.headless)
         summary = None
         try:
+            self._update_status("Iniciando o navegador...")
             driver = self.browser_handler.start_browser()
             if not driver:
                 raise ConnectionError("Driver do navegador não foi inicializado.")
 
-            logger.info("Iniciando processo de login...")
+            self._update_status("Iniciando processo de login...")
             login_page = LoginPage(driver, self.selectors.get('login_page', {}))
             login_page.navigate_to_login_page(self.gms_login_url)
             login_page.execute_login(self.gms_user, self.gms_password)
-            logger.info("Login realizado com sucesso!")
+            self._update_status("Login realizado com sucesso!")
 
-            logger.info("Navegando na página inicial...")
+            self._update_status("Navegando na página inicial...")
             home_page = HomePage(driver, self.selectors.get('home_page', {}))
             home_page.navigate_sidebar_export()
 
-            logger.info("Iniciando processo de exportação...")
+            self._update_status("Iniciando processo de exportação...")
             export_page = ExportPage(driver, self.selectors.get('export_page', {}))
             export_page.export_data(self.document_type, self.emitter, self.operation_type, self.file_type, self.invoice_situation, self.start_date, self.end_date, self.stores_to_process)
+            
+            self._update_status("Aguardando a conclusão da exportação no sistema GMS...")
             export_page.wait_for_export_completion()
+            
+            self._update_status("Realizando o download dos arquivos exportados...")
             export_page.download_exports()
 
-            logger.info("Orquestrador acionando o manipulador de arquivos...")
+            self._update_status("Processando arquivos baixados (descompactando e organizando)...")
             summary = file_handler.process_downloaded_files(self.document_type, self.start_date, self.end_date)
+            self._update_status("Processamento de arquivos concluído.")
 
         except NoInvoicesFoundException as e:
             logger.warning(f"Processo encerrado conforme esperado: {e}")
