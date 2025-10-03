@@ -74,7 +74,7 @@ class ExportPage(BasePage):
 
     def wait_for_export_completion(self):
         logger.info("Iniciando monitoramento da tabela de exportação (verificando apenas a primeira linha)...")
-        minutes = 120
+        minutes = 180
         timeout = time.time() + 60 * minutes
         
         while time.time() < timeout:
@@ -95,9 +95,9 @@ class ExportPage(BasePage):
                             logger.info("✅ Exportação concluída com sucesso!")
                             return
                         if "Em processamento" in status_col:
-                            logger.info("⏳ A expostação está em processamento. Continuando a monitorar...")
+                            logger.info("⏳ A exportação está em processamento. Continuando a monitorar...")
                         if "Pendente" in status_col:
-                            logger.info("⏳ A expostação está pendente. Continuando a monitorar...")
+                            logger.info("⏳ A exportação está pendente. Continuando a monitorar...")
                         if "com Erro" in status_col:
                             logger.error("❌ A exportação falhou, status 'Com erro' encontrado na tabela.")
                             raise Exception("A exportação retornou o status 'Com erro'.")

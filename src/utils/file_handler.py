@@ -5,10 +5,46 @@ import shutil
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from collections import defaultdict
+from collections import defaultdict, Counter
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def log_directory_state(directory: Path, header: str):
+    """
+    Escaneia um diretório e loga um resumo mostrando as subpastas
+    e a contagem de arquivos por tipo dentro de cada uma.
+    """
+    logger.info(f"--- {header} ---")
+    if not directory.exists() or not directory.is_dir():
+        logger.info(f"Diretório '{directory}' não encontrado.")
+        return
+
+    subdirs = [d for d in directory.iterdir() if d.is_dir()]
+    if not subdirs:
+        items = list(directory.glob('*'))
+        if not items:
+            logger.info(f"Diretório '{directory}' está vazio.")
+        else:
+            logger.info(f"Diretório '{directory}' contém {len(items)} arquivos/pastas na raiz.")
+    else:
+        logger.info(f"Resumo do conteúdo de '{directory}':")
+        for subdir in sorted(subdirs):
+            try:
+                files = [f for f in subdir.rglob('*') if f.is_file()]
+                if not files:
+                    logger.info(f"└── [PASTA] {subdir.name}/ (Vazia)")
+                else:
+                    # Conta os arquivos por extensão (tipo)
+                    file_types = Counter(f.suffix for f in files)
+                    summary = ", ".join([f"{ext} ({count})" for ext, count in file_types.items()])
+                    logger.info(f"└── [PASTA] {subdir.name}/ -> Contém: {summary}")
+            except OSError as e:
+                logger.error(f"Não foi possível acessar a subpasta '{subdir.name}'. Erro: {e}")
+
+    logger.info(f"--- Fim da Verificação de '{directory}' ---")
+
 
 def analyze_xml_files_and_log_summary(directory: Path):
     logger.info(f"🔎 Iniciando análise dos arquivos XML em '{directory}'...")
@@ -17,11 +53,12 @@ def analyze_xml_files_and_log_summary(directory: Path):
 
     if not xml_files:
         logger.warning("Nenhum arquivo XML encontrado para análise.")
-        return
+        return {}
 
     stats = defaultdict(int)
     lojas = {}
     xml_dates = set()
+    invalid_files_count = 0
     
     ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
 
@@ -33,7 +70,7 @@ def analyze_xml_files_and_log_summary(directory: Path):
             
             infNFe = root.find('.//nfe:infNFe', ns)
             if infNFe is None:
-                logger.warning(f"Não foi possível encontrar a tag 'infNFe' no arquivo: {xml_file.name}")
+                invalid_files_count += 1
                 continue
 
             ide = infNFe.find('nfe:ide', ns)
@@ -68,6 +105,9 @@ def analyze_xml_files_and_log_summary(directory: Path):
             logger.error(f"Erro de parsing no XML '{xml_file.name}'. O arquivo pode estar corrompido.")
         except Exception as e:
             logger.error(f"Erro inesperado ao processar o arquivo '{xml_file.name}': {e}")
+
+    if invalid_files_count > 0:
+        logger.warning(f"{invalid_files_count} arquivos XML foram ignorados por não serem NF-e/NFC-e válidas (tag 'infNFe' não encontrada).")
 
     sorted_dates_list = sorted(list(xml_dates))
     log_message = (
@@ -109,11 +149,7 @@ def analyze_xml_files_and_log_summary(directory: Path):
         "stores_found": [{"cnpj": cnpj, "name": nome} for cnpj, nome in lojas.items()]
     }
     
-    print("\n---SUMMARY_START---")
-    print(json.dumps(summary_data, indent=4, ensure_ascii=False))
-    print("---SUMMARY_END---")
-
-    return summary_data 
+    return summary_data
 
 def wait_for_file(file_path: Path, timeout_seconds: int = 300):
     logger.info(f"Aguardando o arquivo: {file_path.name}...")
@@ -130,6 +166,7 @@ def wait_for_file(file_path: Path, timeout_seconds: int = 300):
         time.sleep(2)
 
     raise TimeoutError(f"O arquivo '{file_path.name}' não foi encontrado ou não estabilizou no tempo limite de {timeout_seconds} segundos.")
+
 
 def process_downloaded_files(document_type: str, start_date: str, end_date: str):
     summary = None
@@ -149,28 +186,37 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
 
         logger.info(f"Descompactando '{initial_zip_path.name}'...")
         with zipfile.ZipFile(initial_zip_path, 'r') as zip_ref:
-            zip_ref.extractall(pending_dir)
-        
+            for member in zip_ref.infolist():
+                try:
+                    filename = member.filename.encode('cp437').decode('utf-8', 'ignore')
+                    target_path = pending_dir / Path(filename).name
+                    with zip_ref.open(member) as source, open(target_path, "wb") as target:
+                        shutil.copyfileobj(source, target)
+                except Exception as e:
+                    logger.warning(f"Não foi possível extrair o arquivo '{member.filename}' do zip inicial. Erro: {e}")
+                    zip_ref.extract(member, pending_dir)
+
         logger.info("Procurando o segundo arquivo ZIP no diretório 'pending'...")
-        timeout = time.time() + 60
-        while time.time() < timeout:
-            inner_zip_files = [p for p in pending_dir.glob('*.zip') if p.resolve() != initial_zip_path.resolve()]
-            if inner_zip_files:
-                potential_zip = inner_zip_files[0]
-                if wait_for_file(potential_zip, timeout_seconds=30):
-                    second_zip_path = potential_zip
-                    logger.info(f"Segundo arquivo ZIP encontrado: '{second_zip_path.name}'")
-                    break
-            time.sleep(2)
-        
-        if not second_zip_path:
+        inner_zip_files = [p for p in pending_dir.glob('*.zip') if p.resolve() != initial_zip_path.resolve()]
+        if not inner_zip_files:
             raise FileNotFoundError("Nenhum arquivo ZIP secundário foi encontrado em 'pending' após a primeira extração.")
+        
+        second_zip_path = inner_zip_files[0]
+        wait_for_file(second_zip_path)
+        logger.info(f"Segundo arquivo ZIP encontrado: '{second_zip_path.name}'")
 
         second_extract_folder = pending_dir / second_zip_path.stem
         
         logger.info(f"Descompactando '{second_zip_path.name}' para '{second_extract_folder}'...")
         with zipfile.ZipFile(second_zip_path, 'r') as zip_ref:
-            zip_ref.extractall(second_extract_folder)
+             for member in zip_ref.infolist():
+                try:
+                    filename = member.filename.encode('cp437').decode('utf-8', 'ignore')
+                    member.filename = filename
+                    zip_ref.extract(member, second_extract_folder)
+                except Exception as e:
+                    logger.warning(f"Não foi possível extrair o arquivo '{member.filename}' do segundo zip. Erro: {e}")
+                    zip_ref.extract(member, second_extract_folder)
         
         logger.info("Iniciando busca profunda pela pasta que contém os documentos...")
         traversal_path = second_extract_folder
@@ -230,7 +276,7 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
     finally:
         if operation_successful:
             if final_destination_path and final_destination_path.exists():
-                analyze_xml_files_and_log_summary(final_destination_path)
+                summary = analyze_xml_files_and_log_summary(final_destination_path)
 
             logger.info("Operação bem-sucedida. Realizando limpeza do diretório 'pending'...")
             if initial_zip_path and initial_zip_path.exists():
@@ -243,6 +289,11 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
                 shutil.rmtree(second_extract_folder)
                 logger.info(f"Removido diretório: {second_extract_folder.name}")
             logger.info("Limpeza concluída.")
-            return summary 
         else:
             logger.warning("A operação falhou. Nenhum arquivo temporário será removido de 'pending' para permitir análise manual.")
+
+        logger.info("Verificando estado final dos diretórios...")
+        log_directory_state(pending_dir, "ESTADO FINAL DO DIRETÓRIO 'PENDING'")
+        log_directory_state(processed_dir, "ESTADO FINAL DO DIRETÓRIO 'PROCESSED'")
+        
+        return summary

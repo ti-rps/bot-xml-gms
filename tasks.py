@@ -1,5 +1,6 @@
 # tasks.py
 import logging
+import json
 from celery import Celery
 from src.core.bot_runner import BotRunner
 from src.utils.logger_config import setup_logger
@@ -18,13 +19,13 @@ def run_automation_task(self, params: dict):
     summary = None
     try:
         logger.info(f"Iniciando automação para a tarefa: {self.request.id}")
-
         bot_runner = BotRunner(params=params, task=self)
-        
         summary = bot_runner.run()
-
         logger.info(f"Automação concluída para a tarefa: {self.request.id}")
         
+        if summary:
+            logger.info(f"Resultado final da tarefa {self.request.id}: \n{json.dumps(summary, indent=2, ensure_ascii=False)}")
+            
         return {
             "status": "concluído",
             "summary": summary
