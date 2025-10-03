@@ -17,14 +17,17 @@ services:
       - redis
     environment:
       - LOG_ENV=development
+      - PYTHONUNBUFFERED=1
 
   worker:
     build: .
     command: celery -A tasks worker --loglevel=info
     volumes:
       - ./downloads:/app/downloads
+      - '/mnt/r/XML_ASINCRONIZAR/ZZ_XML_BAIXADO_POR_ROBO/GRUPO MARIA SELMA:/app/downloads/processed'
       - ./logs:/app/logs
     depends_on:
       - redis
     environment:
       - LOG_ENV=development
+      - PYTHONUNBUFFERED=1

@@ -1,6 +1,8 @@
 # Dockerfile
 FROM python:3.9-slim
 
+ENV PYTHONUNBUFFERED=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   gnupg \
