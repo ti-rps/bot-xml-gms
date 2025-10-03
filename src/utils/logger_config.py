@@ -4,10 +4,21 @@ from logging.handlers import TimedRotatingFileHandler
 from config import settings
 from datetime import datetime
 import os
+from threading import local
+
+_thread_locals = local()
+
+class TaskIdFilter(logging.Filter):
+    def filter(self, record):
+        record.task_id = getattr(_thread_locals, 'task_id', 'main_process')
+        return True
+
+def set_task_id(task_id):
+    _thread_locals.task_id = task_id
 
 def setup_logger():
     log_format = logging.Formatter(
-        "%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
+        "%(asctime)s - %(levelname)s - [task_id=%(task_id)s] - [%(filename)s:%(lineno)d] - %(message)s"
     )
 
     root_logger = logging.getLogger()
@@ -15,6 +26,8 @@ def setup_logger():
 
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
+
+    root_logger.addFilter(TaskIdFilter())
 
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(log_format)

@@ -1,5 +1,6 @@
 # src/core/bot_runner.py
 import logging
+import os
 from src.automation.browser_handler import BrowserHandler
 from src.utils import data_handler
 from config import settings
@@ -24,10 +25,16 @@ class BotRunner:
         self.end_date = params.get('end_date')
         self.gms_user = params.get('gms_user')
         self.gms_password = params.get('gms_password')
+        if not self.gms_user:
+            self.gms_user = os.getenv('GMS_USER')
+        if not self.gms_password:
+            self.gms_password = os.getenv('GMS_PASSWORD')
         self.gms_login_url = params.get('gms_login_url')
         self.browser_handler = None
         self.selectors = None
         self.task = task
+        if not self.gms_user or not self.gms_password:
+            raise ValueError("Credenciais GMS_USER e GMS_PASSWORD não foram encontradas nem nos parâmetros da API nem nas variáveis de ambiente.")
         
     def _update_status(self, message: str):
         if self.task:
@@ -66,7 +73,14 @@ class BotRunner:
             self._update_status("Iniciando processo de login...")
             login_page = LoginPage(driver, self.selectors.get('login_page', {}))
             login_page.navigate_to_login_page(self.gms_login_url)
-            login_page.execute_login(self.gms_user, self.gms_password)
+            
+            home_page_selectors = self.selectors.get('home_page', {})
+            verification_selector = home_page_selectors.get('sidebar_tax')
+            if not verification_selector:
+                raise ValueError("Seletor de verificação pós-login ('sidebar_tax') não encontrado em selectors.yaml")
+                
+            login_page.execute_login(self.gms_user, self.gms_password, verification_selector)
+
             self._update_status("Login realizado com sucesso!")
 
             self._update_status("Navegando na página inicial...")
