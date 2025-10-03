@@ -24,9 +24,9 @@ services:
     build: .
     command: celery -A tasks worker --loglevel=info
     volumes:
-      - bot-pending-downloads:/app/downloads/pending
-      - bot-processed-downloads:/app/downloads/processed
-      - bot-logs:/app/logs
+      - '/mnt/c/Automations/bot-xml-gms/pending-downloads:/app/downloads/pending'
+      - '/mnt/c/Automations/bot-xml-gms/processed-downloads:/app/downloads/processed'
+      - '/mnt/c/Automations/bot-xml-gms/logs:/app/logs'
     depends_on:
       - redis
     environment:
