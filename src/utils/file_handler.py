@@ -1,3 +1,4 @@
+# src/utils/file_handler.py
 import logging
 import time
 import zipfile
@@ -12,10 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 def log_directory_state(directory: Path, header: str):
-    """
-    Escaneia um diretório e loga um resumo mostrando as subpastas
-    e a contagem de arquivos por tipo dentro de cada uma.
-    """
     logger.info(f"--- {header} ---")
     if not directory.exists() or not directory.is_dir():
         logger.info(f"Diretório '{directory}' não encontrado.")
@@ -36,7 +33,6 @@ def log_directory_state(directory: Path, header: str):
                 if not files:
                     logger.info(f"└── [PASTA] {subdir.name}/ (Vazia)")
                 else:
-                    # Conta os arquivos por extensão (tipo)
                     file_types = Counter(f.suffix for f in files)
                     summary = ", ".join([f"{ext} ({count})" for ext, count in file_types.items()])
                     logger.info(f"└── [PASTA] {subdir.name}/ -> Contém: {summary}")
@@ -233,6 +229,8 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
         
         if not source_folders_parent:
             raise FileNotFoundError("Não foi possível localizar a pasta de origem dos documentos. Estrutura de pastas inesperada.")
+        
+        summary = analyze_xml_files_and_log_summary(source_folders_parent)
 
         folders_to_move = [d for d in source_folders_parent.iterdir() if d.is_dir()]
 
@@ -275,9 +273,6 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
         raise
     finally:
         if operation_successful:
-            if final_destination_path and final_destination_path.exists():
-                summary = analyze_xml_files_and_log_summary(final_destination_path)
-
             logger.info("Operação bem-sucedida. Realizando limpeza do diretório 'pending'...")
             if initial_zip_path and initial_zip_path.exists():
                 initial_zip_path.unlink()
