@@ -108,7 +108,9 @@ class RabbitMQWorker:
             True se a requisição foi bem sucedida, False caso contrário
         """
         try:
-            url = f"{self.maestro_url}{endpoint}"
+            # Garante que o maestro_url não tenha barra no final e o endpoint tenha no começo
+            url = f"{self.maestro_url.rstrip('/')}/{endpoint.lstrip('/')}"
+            
             logger.debug(f"Fazendo requisição {method} para {url}")
             
             response = requests.request(
@@ -143,7 +145,8 @@ class RabbitMQWorker:
         Returns:
             True se reportado com sucesso
         """
-        endpoint = f"/worker/jobs/{job_id}/start"
+        # CORREÇÃO: Adicionado prefixo /api/v1/
+        endpoint = f"/api/v1/worker/jobs/{job_id}/start"
         logger.info(f"📤 Reportando início do job {job_id}")
         return self._make_request("POST", endpoint)
     
@@ -159,7 +162,8 @@ class RabbitMQWorker:
         Returns:
             True se enviado com sucesso
         """
-        endpoint = f"/worker/jobs/{job_id}/log"
+        # CORREÇÃO: Adicionado prefixo /api/v1/
+        endpoint = f"/api/v1/worker/jobs/{job_id}/log"
         payload = {
             "level": level,
             "message": message
@@ -179,7 +183,8 @@ class RabbitMQWorker:
         Returns:
             True se reportado com sucesso
         """
-        endpoint = f"/worker/jobs/{job_id}/finish"
+        # CORREÇÃO: Adicionado prefixo /api/v1/
+        endpoint = f"/api/v1/worker/jobs/{job_id}/finish"
         payload = {
             "status": status,
             "result": result_data
@@ -202,8 +207,9 @@ class RabbitMQWorker:
         try:
             # Parse da mensagem
             message = json.loads(body)
-            # Maestro envia jobId (não job_id)
-            job_id = message.get("jobId")
+            
+            # CORREÇÃO: Maestro envia "job_id" (com underscore), não "jobId"
+            job_id = message.get("job_id")
             
             logger.info(f"📨 Mensagem recebida: {job_id}")
             logger.info(f"Payload: {json.dumps(message, indent=2)}")
@@ -211,9 +217,9 @@ class RabbitMQWorker:
             # Extrair parâmetros aninhados do campo parameters
             params = message.get("parameters", {})
             
-            # Validar campos obrigatórios na raiz (jobId)
+            # Validar campos obrigatórios na raiz (job_id)
             if not job_id:
-                raise ValueError("Campo obrigatório 'jobId' não encontrado na mensagem")
+                raise ValueError("Campo obrigatório 'job_id' não encontrado na mensagem")
             
             # Validar campos obrigatórios em parameters
             required_fields = ['stores', 'document_type', 'start_date', 'end_date', 'gms_login_url']

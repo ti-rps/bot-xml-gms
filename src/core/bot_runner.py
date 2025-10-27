@@ -2,7 +2,7 @@
 import logging
 import os
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, Callable
 from src.automation.browser_handler import BrowserHandler
 from src.utils import data_handler
 from config import settings
@@ -15,9 +15,8 @@ from src.utils.exceptions import AutomationException, NoInvoicesFoundException
 logger = logging.getLogger(__name__)
 
 class BotRunner:
-    def __init__(self, params: dict, job_id: str = None, log_callback: callable = None):
-        self.job_id = job_id
-        self.log_callback = log_callback
+    # ATUALIZAÇÃO: Modificado __init__ para aceitar job_id e log_callback
+    def __init__(self, params: dict, job_id: str = None, log_callback: Callable = None):
         self.headless = params.get('headless', True)
         self.stores_to_process = params.get('stores', [])
         self.document_type = params.get('document_type')
@@ -29,6 +28,10 @@ class BotRunner:
         self.end_date = params.get('end_date')
         self.gms_user = params.get('gms_user')
         self.gms_password = params.get('gms_password')
+        
+        # ATUALIZAÇÃO: Armazenar job_id e callback
+        self.job_id = job_id
+        self.log_callback = log_callback
         
         if not self.gms_user:
             self.gms_user = os.getenv('GMS_USER') or settings.gms_username
@@ -47,18 +50,21 @@ class BotRunner:
             raise ValueError("Credenciais GMS_USER e GMS_PASSWORD não foram encontradas nem nos parâmetros da API nem nas variáveis de ambiente.")
         
     def _update_status(self, message: str, progress: int = None):
-        """Atualiza status interno e envia log para o Maestro"""
+        """Atualiza status interno E envia log para o Maestro via callback"""
         self.current_message = message
         if progress is not None:
             self.progress = progress
+        
+        # Log local
         logger.info(message)
         
-        # Enviar log para o Maestro em tempo real (se disponível)
-        if self.job_id and self.log_callback:
+        # ATUALIZAÇÃO: Enviar log para o Maestro se o callback foi fornecido
+        if self.log_callback and self.job_id:
             try:
                 self.log_callback(self.job_id, "INFO", message)
             except Exception as e:
-                logger.warning(f"Falha ao enviar log para Maestro: {e}")
+                # Não quebrar a automação se o log falhar
+                logger.warning(f"Falha ao enviar log para o Maestro via callback: {e}")
 
     def setup(self):
         self._update_status("Preparando ambiente para a execução...", 5)
