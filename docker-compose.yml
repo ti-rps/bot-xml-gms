@@ -1,60 +1,28 @@
-version: '3.8'
-
 services:
-  # Worker Bot XML GMS
-  worker:
+
+  gms-xml-worker:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: bot-xml-worker
-    restart: unless-stopped
-    env_file:
-      - .env
+    container_name: gms-xml-worker
     environment:
-      - WORKER_ID=${WORKER_ID:-worker-gms-01}
-      - RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq}
-      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
-      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-admin123}
-      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE:-bot-xml-tasks}
-      - MAESTRO_API_URL=${MAESTRO_API_URL:-http://maestro:8080}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    volumes:
-      - ./downloads:/app/downloads
-      - ./logs:/app/logs
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
+      - RABBITMQ_HOST=maestro_rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASSWORD=guest
+      - RABBITMQ_QUEUE=automation_jobs
+
+      - MAESTRO_DB_HOST=maestro_postgres
+      - MAESTRO_DB_PORT=5432
+      - MAESTRO_DB_USER=user
+      - MAESTRO_DB_PASSWORD=password
+      - MAESTRO_DB_NAME=maestro_db
+
+      - GMS_USER=${GMS_USER}
+      - GMS_PASSWORD=${GMS_PASSWORD}
+      - WORKER_ID=gms-worker-01
+      - LOG_LEVEL=INFO
+
     networks:
       - maestro-network
-
-  # RabbitMQ (para desenvolvimento/teste local)
-  rabbitmq:
-    image: rabbitmq:3.12-management-alpine
-    container_name: bot-xml-rabbitmq
     restart: unless-stopped
-    environment:
-      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-admin123}
-    ports:
-      - "5672:5672"   # AMQP
-      - "15672:15672" # Management UI
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - maestro-network
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-volumes:
-  rabbitmq_data:
-    driver: local
-
-networks:
-  maestro-network:
-    driver: bridge
-    name: maestro-network

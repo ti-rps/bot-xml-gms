@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     
     # Maestro API
     maestro_api_url: str = Field(default="http://localhost:8080")
+
+    # Banco de Dados Maestro
+    maestro_db_host: str = Field(default="postgres")
+    maestro_db_port: int = Field(default=5432)
+    maestro_db_user: str = Field(default="user")
+    maestro_db_password: str = Field(default="password")
+    maestro_db_name: str = Field(default="maestro_db")
     
     # Caminhos
     base_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent)
