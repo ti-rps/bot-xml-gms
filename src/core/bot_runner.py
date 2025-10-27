@@ -15,8 +15,6 @@ from src.utils.exceptions import AutomationException, NoInvoicesFoundException
 logger = logging.getLogger(__name__)
 
 class BotRunner:
-    """Executa o processo de download e processamento de documentos fiscais"""
-    
     def __init__(self, params: dict):
         self.headless = params.get('headless', True)
         self.stores_to_process = params.get('stores', [])
@@ -30,7 +28,6 @@ class BotRunner:
         self.gms_user = params.get('gms_user')
         self.gms_password = params.get('gms_password')
         
-        # Fallback para variáveis de ambiente ou settings
         if not self.gms_user:
             self.gms_user = os.getenv('GMS_USER') or settings.gms_username
         if not self.gms_password:
@@ -40,7 +37,6 @@ class BotRunner:
         self.browser_handler = None
         self.selectors = None
         
-        # Estado interno (sem Celery)
         self.status = "idle"
         self.progress = 0
         self.current_message = ""
