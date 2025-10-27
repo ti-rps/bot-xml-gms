@@ -143,7 +143,7 @@ class RabbitMQWorker:
         Returns:
             True se reportado com sucesso
         """
-        endpoint = f"/api/v1/jobs/{job_id}/start"
+        endpoint = f"/worker/jobs/{job_id}/start"
         logger.info(f"📤 Reportando início do job {job_id}")
         return self._make_request("POST", endpoint)
     
@@ -159,7 +159,7 @@ class RabbitMQWorker:
         Returns:
             True se enviado com sucesso
         """
-        endpoint = f"/api/v1/jobs/{job_id}/log"
+        endpoint = f"/worker/jobs/{job_id}/log"
         payload = {
             "level": level,
             "message": message
@@ -167,35 +167,25 @@ class RabbitMQWorker:
         logger.debug(f"📝 Enviando log [{level}]: {message}")
         return self._make_request("POST", endpoint, payload)
     
-    def report_status_complete(self, job_id: str, result_data: Dict) -> bool:
+    def report_finish(self, job_id: str, status: str, result_data: Dict) -> bool:
         """
-        Reporta conclusão bem sucedida do job
+        Reporta finalização do job (sucesso ou falha)
         
         Args:
             job_id: ID do job
+            status: Status final ("completed", "completed_no_invoices", "failed", etc.)
             result_data: Dados do resultado da execução
             
         Returns:
             True se reportado com sucesso
         """
-        endpoint = f"/api/v1/jobs/{job_id}/complete"
-        logger.info(f"✅ Reportando conclusão do job {job_id}")
-        return self._make_request("POST", endpoint, result_data)
-    
-    def report_status_fail(self, job_id: str, error_data: Dict) -> bool:
-        """
-        Reporta falha na execução do job
-        
-        Args:
-            job_id: ID do job
-            error_data: Dados do erro
-            
-        Returns:
-            True se reportado com sucesso
-        """
-        endpoint = f"/api/v1/jobs/{job_id}/fail"
-        logger.error(f"❌ Reportando falha do job {job_id}")
-        return self._make_request("POST", endpoint, error_data)
+        endpoint = f"/worker/jobs/{job_id}/finish"
+        payload = {
+            "status": status,
+            "result": result_data
+        }
+        logger.info(f"🏁 Reportando finalização do job {job_id} com status: {status}")
+        return self._make_request("POST", endpoint, payload)
     
     def process_message(self, ch, method, properties, body):
         """
@@ -212,17 +202,18 @@ class RabbitMQWorker:
         try:
             # Parse da mensagem
             message = json.loads(body)
-            job_id = message.get("job_id")
+            # Maestro envia jobId (não job_id)
+            job_id = message.get("jobId")
             
             logger.info(f"📨 Mensagem recebida: {job_id}")
             logger.info(f"Payload: {json.dumps(message, indent=2)}")
             
-            # Extrair parâmetros aninhados
+            # Extrair parâmetros aninhados do campo parameters
             params = message.get("parameters", {})
             
-            # Validar campos obrigatórios na raiz
+            # Validar campos obrigatórios na raiz (jobId)
             if not job_id:
-                raise ValueError("Campo obrigatório 'job_id' não encontrado")
+                raise ValueError("Campo obrigatório 'jobId' não encontrado na mensagem")
             
             # Validar campos obrigatórios em parameters
             required_fields = ['stores', 'document_type', 'start_date', 'end_date', 'gms_login_url']
@@ -260,7 +251,8 @@ class RabbitMQWorker:
             logger.info(f"🚀 Iniciando execução do job {job_id}")
             self.report_log(job_id, "INFO", "Iniciando execução da automação...")
             
-            bot_runner = BotRunner(bot_params)
+            # Criar instância do BotRunner passando job_id e callback de log
+            bot_runner = BotRunner(bot_params, job_id=job_id, log_callback=self.report_log)
             result = bot_runner.run()
             
             # Adicionar job_id ao resultado
@@ -269,18 +261,18 @@ class RabbitMQWorker:
             # Reportar resultado baseado no status
             if result.get("status") == "completed":
                 self.report_log(job_id, "INFO", "Automação concluída com sucesso!")
-                self.report_status_complete(job_id, result)
+                self.report_finish(job_id, "completed", result)
                 logger.info(f"✅ Job {job_id} concluído com sucesso")
                 
             elif result.get("status") == "completed_no_invoices":
                 self.report_log(job_id, "INFO", "Automação concluída, porém nenhuma nota fiscal foi encontrada")
-                self.report_status_complete(job_id, result)
+                self.report_finish(job_id, "completed_no_invoices", result)
                 logger.info(f"✅ Job {job_id} concluído sem notas fiscais")
                 
             else:
                 error_msg = result.get("error", "Falha desconhecida na execução")
                 self.report_log(job_id, "ERROR", f"Automação falhou: {error_msg}")
-                self.report_status_fail(job_id, result)
+                self.report_finish(job_id, "failed", result)
                 logger.error(f"❌ Job {job_id} falhou")
             
             # ACK da mensagem
@@ -292,7 +284,7 @@ class RabbitMQWorker:
             logger.error(f"Body recebido: {body}")
             if job_id:
                 self.report_log(job_id, "ERROR", f"Erro ao decodificar JSON: {str(e)}")
-                self.report_status_fail(job_id, {
+                self.report_finish(job_id, "failed", {
                     "error": f"JSON inválido: {str(e)}",
                     "error_type": "JSONDecodeError"
                 })
@@ -302,7 +294,7 @@ class RabbitMQWorker:
             logger.error(f"❌ Erro de validação: {e}")
             if job_id:
                 self.report_log(job_id, "ERROR", f"Erro de validação: {str(e)}")
-                self.report_status_fail(job_id, {
+                self.report_finish(job_id, "failed", {
                     "error": str(e),
                     "error_type": "ValidationError"
                 })
@@ -315,7 +307,7 @@ class RabbitMQWorker:
             if job_id:
                 try:
                     self.report_log(job_id, "ERROR", f"Erro inesperado: {str(e)}")
-                    self.report_status_fail(job_id, {
+                    self.report_finish(job_id, "failed", {
                         "error": str(e),
                         "error_type": type(e).__name__
                     })

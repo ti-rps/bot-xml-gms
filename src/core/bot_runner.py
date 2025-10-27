@@ -15,7 +15,9 @@ from src.utils.exceptions import AutomationException, NoInvoicesFoundException
 logger = logging.getLogger(__name__)
 
 class BotRunner:
-    def __init__(self, params: dict):
+    def __init__(self, params: dict, job_id: str = None, log_callback: callable = None):
+        self.job_id = job_id
+        self.log_callback = log_callback
         self.headless = params.get('headless', True)
         self.stores_to_process = params.get('stores', [])
         self.document_type = params.get('document_type')
@@ -45,11 +47,18 @@ class BotRunner:
             raise ValueError("Credenciais GMS_USER e GMS_PASSWORD não foram encontradas nem nos parâmetros da API nem nas variáveis de ambiente.")
         
     def _update_status(self, message: str, progress: int = None):
-        """Atualiza status interno (sem Celery task)"""
+        """Atualiza status interno e envia log para o Maestro"""
         self.current_message = message
         if progress is not None:
             self.progress = progress
         logger.info(message)
+        
+        # Enviar log para o Maestro em tempo real (se disponível)
+        if self.job_id and self.log_callback:
+            try:
+                self.log_callback(self.job_id, "INFO", message)
+            except Exception as e:
+                logger.warning(f"Falha ao enviar log para Maestro: {e}")
 
     def setup(self):
         self._update_status("Preparando ambiente para a execução...", 5)
