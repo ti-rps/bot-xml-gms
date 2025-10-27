@@ -95,44 +95,102 @@ class RabbitMQWorker:
                 else:
                     raise
     
-    def report_status(self, task_id: str, status: str, data: Optional[Dict] = None):
+    def _make_request(self, method: str, endpoint: str, payload: Optional[Dict] = None) -> bool:
         """
-        Reporta status da tarefa para o Maestro via HTTP
+        Helper para fazer requisições HTTP ao Maestro
         
         Args:
-            task_id: ID da tarefa
-            status: Status atual (started, progress, completed, failed)
-            data: Dados adicionais
+            method: Método HTTP (POST, PUT, etc)
+            endpoint: Endpoint da API (ex: /api/v1/jobs/{job_id}/start)
+            payload: Dados a serem enviados
+            
+        Returns:
+            True se a requisição foi bem sucedida, False caso contrário
         """
         try:
-            url = f"{self.maestro_url}/api/tasks/{task_id}/status"
+            # Garante que o maestro_url não tenha barra no final e o endpoint tenha no começo
+            url = f"{self.maestro_url.rstrip('/')}/{endpoint.lstrip('/')}"
             
-            payload = {
-                "task_id": task_id,
-                "status": status,
-                "timestamp": time.time(),
-                "worker_id": settings.worker_id,
-                "data": data or {}
-            }
+            logger.debug(f"Fazendo requisição {method} para {url}")
             
-            logger.debug(f"Reportando status '{status}' para tarefa {task_id}")
-            
-            response = requests.post(
-                url,
+            response = requests.request(
+                method=method,
+                url=url,
                 json=payload,
                 timeout=10,
                 headers={"Content-Type": "application/json"}
             )
             
-            if response.status_code == 200:
-                logger.debug(f"✅ Status reportado com sucesso: {status}")
+            if response.status_code in [200, 201, 204]:
+                logger.debug(f"✅ Requisição bem sucedida: {method} {endpoint}")
+                return True
             else:
-                logger.warning(f"⚠️ Falha ao reportar status. HTTP {response.status_code}: {response.text}")
+                logger.warning(f"⚠️ Falha na requisição. HTTP {response.status_code}: {response.text}")
+                return False
                 
         except requests.exceptions.RequestException as e:
-            logger.error(f"❌ Erro ao reportar status para Maestro: {e}")
+            logger.error(f"❌ Erro ao fazer requisição para Maestro: {e}")
+            return False
         except Exception as e:
-            logger.error(f"❌ Erro inesperado ao reportar status: {e}")
+            logger.error(f"❌ Erro inesperado ao fazer requisição: {e}")
+            return False
+    
+    def report_status_start(self, job_id: str) -> bool:
+        """
+        Reporta início da execução do job
+        
+        Args:
+            job_id: ID do job
+            
+        Returns:
+            True se reportado com sucesso
+        """
+        # CORREÇÃO: Adicionado prefixo /api/v1/
+        endpoint = f"/api/v1/worker/jobs/{job_id}/start"
+        logger.info(f"📤 Reportando início do job {job_id}")
+        return self._make_request("POST", endpoint)
+    
+    def report_log(self, job_id: str, level: str, message: str) -> bool:
+        """
+        Envia log para o Maestro
+        
+        Args:
+            job_id: ID do job
+            level: Nível do log (INFO, WARNING, ERROR)
+            message: Mensagem do log
+            
+        Returns:
+            True se enviado com sucesso
+        """
+        # CORREÇÃO: Adicionado prefixo /api/v1/
+        endpoint = f"/api/v1/worker/jobs/{job_id}/log"
+        payload = {
+            "level": level,
+            "message": message
+        }
+        logger.debug(f"📝 Enviando log [{level}]: {message}")
+        return self._make_request("POST", endpoint, payload)
+    
+    def report_finish(self, job_id: str, status: str, result_data: Dict) -> bool:
+        """
+        Reporta finalização do job (sucesso ou falha)
+        
+        Args:
+            job_id: ID do job
+            status: Status final ("completed", "completed_no_invoices", "failed", etc.)
+            result_data: Dados do resultado da execução
+            
+        Returns:
+            True se reportado com sucesso
+        """
+        # CORREÇÃO: Adicionado prefixo /api/v1/
+        endpoint = f"/api/v1/worker/jobs/{job_id}/finish"
+        payload = {
+            "status": status,
+            "result": result_data
+        }
+        logger.info(f"🏁 Reportando finalização do job {job_id} com status: {status}")
+        return self._make_request("POST", endpoint, payload)
     
     def process_message(self, ch, method, properties, body):
         """
@@ -144,79 +202,105 @@ class RabbitMQWorker:
             properties: Propriedades da mensagem
             body: Corpo da mensagem
         """
-        task_id = None
+        job_id = None
         
         try:
             # Parse da mensagem
             message = json.loads(body)
-            task_id = message.get("task_id")
             
-            logger.info(f"📨 Mensagem recebida: {task_id}")
+            # CORREÇÃO: Maestro envia "job_id" (com underscore), não "jobId"
+            job_id = message.get("job_id")
+            
+            logger.info(f"📨 Mensagem recebida: {job_id}")
             logger.info(f"Payload: {json.dumps(message, indent=2)}")
             
-            # Validar campos obrigatórios
-            required_fields = ['task_id', 'stores', 'document_type', 'start_date', 'end_date', 'gms_login_url']
-            missing_fields = [field for field in required_fields if not message.get(field)]
+            # Extrair parâmetros aninhados do campo parameters
+            params = message.get("parameters", {})
+            
+            # Validar campos obrigatórios na raiz (job_id)
+            if not job_id:
+                raise ValueError("Campo obrigatório 'job_id' não encontrado na mensagem")
+            
+            # Validar campos obrigatórios em parameters
+            required_fields = ['stores', 'document_type', 'start_date', 'end_date', 'gms_login_url']
+            missing_fields = [field for field in required_fields if not params.get(field)]
             
             if missing_fields:
-                raise ValueError(f"Campos obrigatórios faltando: {', '.join(missing_fields)}")
+                raise ValueError(f"Campos obrigatórios faltando em 'parameters': {', '.join(missing_fields)}")
+            
+            # Reportar início da execução
+            self.report_status_start(job_id)
+            self.report_log(job_id, "INFO", f"Job {job_id} iniciado. Preparando execução...")
             
             # Preparar parâmetros para o BotRunner
-            params = {
-                'headless': message.get('headless', True),
-                'stores': message.get('stores', []),
-                'document_type': message.get('document_type'),
-                'emitter': message.get('emitter', 'Qualquer'),
-                'operation_type': message.get('operation_type', 'Qualquer'),
-                'file_type': message.get('file_type', 'XML'),
-                'invoice_situation': message.get('invoice_situation', 'Qualquer'),
-                'start_date': message.get('start_date'),
-                'end_date': message.get('end_date'),
-                'gms_user': message.get('gms_user'),
-                'gms_password': message.get('gms_password'),
-                'gms_login_url': message.get('gms_login_url')
+            bot_params = {
+                'headless': params.get('headless', True),
+                'stores': params.get('stores', []),
+                'document_type': params.get('document_type'),
+                'emitter': params.get('emitter', 'Qualquer'),
+                'operation_type': params.get('operation_type', 'Qualquer'),
+                'file_type': params.get('file_type', 'XML'),
+                'invoice_situation': params.get('invoice_situation', 'Qualquer'),
+                'start_date': params.get('start_date'),
+                'end_date': params.get('end_date'),
+                'gms_user': params.get('gms_user'),
+                'gms_password': params.get('gms_password'),
+                'gms_login_url': params.get('gms_login_url')
             }
             
-            # Reportar início
-            self.report_status(task_id, "started", {
-                "document_type": params['document_type'],
-                "start_date": params['start_date'],
-                "end_date": params['end_date'],
-                "stores": params['stores']
-            })
+            # Log dos parâmetros
+            self.report_log(job_id, "INFO", f"Processando {len(bot_params['stores'])} loja(s)")
+            self.report_log(job_id, "INFO", f"Período: {bot_params['start_date']} a {bot_params['end_date']}")
+            self.report_log(job_id, "INFO", f"Tipo de documento: {bot_params['document_type']}")
             
             # Executar tarefa
-            logger.info(f"🚀 Iniciando execução da tarefa {task_id}")
-            bot_runner = BotRunner(params)
+            logger.info(f"🚀 Iniciando execução do job {job_id}")
+            self.report_log(job_id, "INFO", "Iniciando execução da automação...")
+            
+            # Criar instância do BotRunner passando job_id e callback de log
+            bot_runner = BotRunner(bot_params, job_id=job_id, log_callback=self.report_log)
             result = bot_runner.run()
             
-            # Adicionar task_id ao resultado
-            result['task_id'] = task_id
+            # Adicionar job_id ao resultado
+            result['job_id'] = job_id
             
-            # Reportar resultado
+            # Reportar resultado baseado no status
             if result.get("status") == "completed":
-                self.report_status(task_id, "completed", result)
-                logger.info(f"✅ Tarefa {task_id} concluída com sucesso")
+                self.report_log(job_id, "INFO", "Automação concluída com sucesso!")
+                self.report_finish(job_id, "completed", result)
+                logger.info(f"✅ Job {job_id} concluído com sucesso")
+                
             elif result.get("status") == "completed_no_invoices":
-                self.report_status(task_id, "completed", result)
-                logger.info(f"✅ Tarefa {task_id} concluída sem notas fiscais")
+                self.report_log(job_id, "INFO", "Automação concluída, porém nenhuma nota fiscal foi encontrada")
+                self.report_finish(job_id, "completed_no_invoices", result)
+                logger.info(f"✅ Job {job_id} concluído sem notas fiscais")
+                
             else:
-                self.report_status(task_id, "failed", result)
-                logger.error(f"❌ Tarefa {task_id} falhou")
+                error_msg = result.get("error", "Falha desconhecida na execução")
+                self.report_log(job_id, "ERROR", f"Automação falhou: {error_msg}")
+                self.report_finish(job_id, "failed", result)
+                logger.error(f"❌ Job {job_id} falhou")
             
             # ACK da mensagem
             ch.basic_ack(delivery_tag=method.delivery_tag)
-            logger.info(f"✅ Mensagem processada e confirmada: {task_id}")
+            logger.info(f"✅ Mensagem processada e confirmada: {job_id}")
             
         except json.JSONDecodeError as e:
             logger.error(f"❌ Erro ao decodificar JSON: {e}")
             logger.error(f"Body recebido: {body}")
+            if job_id:
+                self.report_log(job_id, "ERROR", f"Erro ao decodificar JSON: {str(e)}")
+                self.report_finish(job_id, "failed", {
+                    "error": f"JSON inválido: {str(e)}",
+                    "error_type": "JSONDecodeError"
+                })
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             
         except ValueError as e:
             logger.error(f"❌ Erro de validação: {e}")
-            if task_id:
-                self.report_status(task_id, "failed", {
+            if job_id:
+                self.report_log(job_id, "ERROR", f"Erro de validação: {str(e)}")
+                self.report_finish(job_id, "failed", {
                     "error": str(e),
                     "error_type": "ValidationError"
                 })
@@ -226,9 +310,10 @@ class RabbitMQWorker:
             logger.error(f"❌ Erro ao processar mensagem: {e}", exc_info=True)
             
             # Tentar reportar falha
-            if task_id:
+            if job_id:
                 try:
-                    self.report_status(task_id, "failed", {
+                    self.report_log(job_id, "ERROR", f"Erro inesperado: {str(e)}")
+                    self.report_finish(job_id, "failed", {
                         "error": str(e),
                         "error_type": type(e).__name__
                     })
