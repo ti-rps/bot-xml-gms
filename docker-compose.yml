@@ -1,37 +1,60 @@
-# docker-compose.yml
-services:
-  redis:
-    image: "redis:alpine"
-    ports:
-      - "6379:6379"
+version: '3.8'
 
-  api:
-    build: .
-    command: uvicorn api:app --host 0.0.0.0 --port 8000
+services:
+  # Worker Bot XML GMS
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bot-xml-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - WORKER_ID=${WORKER_ID:-worker-gms-01}
+      - RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq}
+      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-admin123}
+      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE:-bot-xml-tasks}
+      - MAESTRO_API_URL=${MAESTRO_API_URL:-http://maestro:8080}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ./downloads:/app/downloads
       - ./logs:/app/logs
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - maestro-network
+
+  # RabbitMQ (para desenvolvimento/teste local)
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: bot-xml-rabbitmq
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-admin123}
     ports:
-      - "8000:8000"
-    depends_on:
-      - redis
-    environment:
-      - LOG_ENV=development
-      - PYTHONUNBUFFERED=1
-
-  worker:
-    build: .
-    command: celery -A tasks worker --loglevel=info
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
     volumes:
-      - ./downloads/pending:/app/downloads/pending
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - maestro-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-      - '/mnt/c/botDownloads/bot-xml-gms:/app/downloads/processed'
+volumes:
+  rabbitmq_data:
+    driver: local
 
-      - ./logs:/app/logs
-    depends_on:
-      - redis
-    environment:
-      - LOG_ENV=development
-      - PYTHONUNBUFFERED=1
-      - GMS_USER=${GMS_USER}
-      - GMS_PASSWORD=${GMS_PASSWORD}
+networks:
+  maestro-network:
+    driver: bridge
+    name: maestro-network
