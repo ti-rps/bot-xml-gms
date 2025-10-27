@@ -23,6 +23,12 @@ services:
       - WORKER_ID=gms-worker-01
       - LOG_LEVEL=INFO
 
+      - MAESTRO_API_URL=http://maestro-backend:8000
+
     networks:
       - maestro-network
     restart: unless-stopped
+
+networks:
+  maestro-network:
+    external: true
