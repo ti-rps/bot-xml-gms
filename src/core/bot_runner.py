@@ -48,6 +48,18 @@ class BotRunner:
         if not self.gms_user or not self.gms_password:
             raise ValueError("Credenciais GMS_USER e GMS_PASSWORD não foram encontradas nem nos parâmetros da API nem nas variáveis de ambiente.")
         
+        # ✨ FASE 2.2: Validações críticas
+        if not self.gms_login_url:
+            raise ValueError("Parâmetro obrigatório 'gms_login_url' não fornecido.")
+        
+        if not config_settings.SELECTORS_FILE.exists():
+            raise FileNotFoundError(f"Arquivo de seletores não encontrado: {config_settings.SELECTORS_FILE}")
+        
+        if not self.stores_to_process:
+            raise ValueError("Parâmetro obrigatório 'stores' não fornecido ou vazio.")
+        
+        logger.info(f"🤖 BotRunner inicializado com sucesso - Job ID: {job_id}")
+        
     def _update_status(self, message: str, progress: int = None):
         self.current_message = message
         if progress is not None:
