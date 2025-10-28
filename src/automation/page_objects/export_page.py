@@ -3,6 +3,7 @@ import time
 import logging
 from selenium.webdriver.remote.webdriver import WebDriver
 from .base_page import BasePage
+from config import settings
 from src.utils.exceptions import NoInvoicesFoundException
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class ExportPage(BasePage):
                     self.click(self.selectors['export_button'])
                     logger.info("Clique no botão de exportar realizado.")
                     time.sleep(1)
-                    if self.is_element_present(self.selectors['alert_msg'], timeout=3):
+                    if self.is_element_present(self.selectors['alert_msg'], timeout=settings.DEFAULT_TIMEOUT // 10):
                         alert_element = self._find_element(self.selectors['alert_msg'])
                         if "Não existem notas a serem exportadas para esse filtro." in alert_element.text:
                             logger.warning("Nenhuma nota encontrada para os filtros especificados. Encerrando o processo de exportação.")
