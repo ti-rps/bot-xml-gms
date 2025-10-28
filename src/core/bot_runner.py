@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, Optional, Callable
 from src.automation.browser_handler import BrowserHandler
 from src.utils import data_handler
-from config import settings
+from config import settings as config_settings
 from src.automation.page_objects.login_page import LoginPage
 from src.automation.page_objects.home_page import HomePage
 from src.automation.page_objects.export_page import ExportPage
@@ -15,7 +15,6 @@ from src.utils.exceptions import AutomationException, NoInvoicesFoundException
 logger = logging.getLogger(__name__)
 
 class BotRunner:
-    # ATUALIZAÇÃO: Modificado __init__ para aceitar job_id e log_callback
     def __init__(self, params: dict, job_id: str = None, log_callback: Callable = None):
         self.headless = params.get('headless', True)
         self.stores_to_process = params.get('stores', [])
@@ -29,14 +28,13 @@ class BotRunner:
         self.gms_user = params.get('gms_user')
         self.gms_password = params.get('gms_password')
         
-        # ATUALIZAÇÃO: Armazenar job_id e callback
         self.job_id = job_id
         self.log_callback = log_callback
         
         if not self.gms_user:
-            self.gms_user = os.getenv('GMS_USER') or settings.gms_username
+            self.gms_user = os.getenv('GMS_USER') or config_settings.gms_username
         if not self.gms_password:
-            self.gms_password = os.getenv('GMS_PASSWORD') or settings.gms_password
+            self.gms_password = os.getenv('GMS_PASSWORD') or config_settings.gms_password
             
         self.gms_login_url = params.get('gms_login_url')
         self.browser_handler = None
@@ -50,20 +48,16 @@ class BotRunner:
             raise ValueError("Credenciais GMS_USER e GMS_PASSWORD não foram encontradas nem nos parâmetros da API nem nas variáveis de ambiente.")
         
     def _update_status(self, message: str, progress: int = None):
-        """Atualiza status interno E envia log para o Maestro via callback"""
         self.current_message = message
         if progress is not None:
             self.progress = progress
         
-        # Log local
         logger.info(message)
         
-        # ATUALIZAÇÃO: Enviar log para o Maestro se o callback foi fornecido
         if self.log_callback and self.job_id:
             try:
                 self.log_callback(self.job_id, "INFO", message)
             except Exception as e:
-                # Não quebrar a automação se o log falhar
                 logger.warning(f"Falha ao enviar log para o Maestro via callback: {e}")
 
     def setup(self):
@@ -73,7 +67,7 @@ class BotRunner:
             logger.warning("Nenhuma loja fornecida nos parâmetros para processar.")
             return False
         
-        self.selectors = data_handler.load_yaml_file(settings.SELECTORS_FILE)
+        self.selectors = data_handler.load_yaml_file(config_settings.SELECTORS_FILE)
         if not self.selectors:
             logger.error("Falha ao carregar seletores. A automação não pode continuar.")
             return False
@@ -81,12 +75,6 @@ class BotRunner:
         return True
     
     def run(self) -> Dict:
-        """
-        Executa o fluxo completo de automação
-        
-        Returns:
-            Dicionário com resultado da execução
-        """
         logger.info("🚀 --- INICIANDO AUTOMAÇÃO BOT-XML-GMS --- 🚀")
         start_time = datetime.now()
         

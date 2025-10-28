@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Worker RabbitMQ para bot-xml-gms
-Consome tarefas do RPS Maestro e reporta status via HTTP
-"""
-
 import logging
 import logging.config
 import json
@@ -13,40 +7,34 @@ import sys
 from typing import Dict, Optional
 import pika
 import requests
+from pika import PlainCredentials, ConnectionParameters, BlockingConnection
 from pathlib import Path
 
-from config.settings import settings
+from config import settings
 from src.core.bot_runner import BotRunner
 
-# Configurar logging
 logging.config.dictConfig(settings.get_log_config())
 logger = logging.getLogger(__name__)
 
 
 class RabbitMQWorker:
-    """Worker que consome tarefas do RabbitMQ e reporta status via HTTP"""
-    
     def __init__(self):
         self.connection: Optional[pika.BlockingConnection] = None
         self.channel: Optional[pika.channel.Channel] = None
         self.should_stop = False
         
-        # Configurações do RabbitMQ
         self.rabbitmq_host = settings.rabbitmq_host
         self.rabbitmq_port = settings.rabbitmq_port
         self.rabbitmq_user = settings.rabbitmq_user
         self.rabbitmq_password = settings.rabbitmq_password
         self.queue_name = settings.rabbitmq_queue
         
-        # Configurações do Maestro
         self.maestro_url = settings.maestro_api_url
         
-        # Registrar handlers de sinal
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
     
     def _signal_handler(self, signum, frame):
-        """Handler para sinais de interrupção"""
         logger.info(f"Recebido sinal {signum}. Encerrando gracefully...")
         self.should_stop = True
         if self.connection and not self.connection.is_closed:
@@ -54,7 +42,6 @@ class RabbitMQWorker:
         sys.exit(0)
     
     def connect(self):
-        """Estabelece conexão com RabbitMQ"""
         max_retries = 5
         retry_delay = 5
         
@@ -78,10 +65,8 @@ class RabbitMQWorker:
                 self.connection = pika.BlockingConnection(parameters)
                 self.channel = self.connection.channel()
                 
-                # Declarar fila
                 self.channel.queue_declare(queue=self.queue_name, durable=True)
                 
-                # Configurar QoS
                 self.channel.basic_qos(prefetch_count=1)
                 
                 logger.info(f"✅ Conectado ao RabbitMQ. Aguardando mensagens na fila '{self.queue_name}'...")
@@ -96,19 +81,7 @@ class RabbitMQWorker:
                     raise
     
     def _make_request(self, method: str, endpoint: str, payload: Optional[Dict] = None) -> bool:
-        """
-        Helper para fazer requisições HTTP ao Maestro
-        
-        Args:
-            method: Método HTTP (POST, PUT, etc)
-            endpoint: Endpoint da API (ex: /api/v1/jobs/{job_id}/start)
-            payload: Dados a serem enviados
-            
-        Returns:
-            True se a requisição foi bem sucedida, False caso contrário
-        """
         try:
-            # Garante que o maestro_url não tenha barra no final e o endpoint tenha no começo
             url = f"{self.maestro_url.rstrip('/')}/{endpoint.lstrip('/')}"
             
             logger.debug(f"Fazendo requisição {method} para {url}")
@@ -136,33 +109,11 @@ class RabbitMQWorker:
             return False
     
     def report_status_start(self, job_id: str) -> bool:
-        """
-        Reporta início da execução do job
-        
-        Args:
-            job_id: ID do job
-            
-        Returns:
-            True se reportado com sucesso
-        """
-        # CORREÇÃO: Adicionado prefixo /api/v1/
         endpoint = f"/api/v1/worker/jobs/{job_id}/start"
         logger.info(f"📤 Reportando início do job {job_id}")
         return self._make_request("POST", endpoint)
     
     def report_log(self, job_id: str, level: str, message: str) -> bool:
-        """
-        Envia log para o Maestro
-        
-        Args:
-            job_id: ID do job
-            level: Nível do log (INFO, WARNING, ERROR)
-            message: Mensagem do log
-            
-        Returns:
-            True se enviado com sucesso
-        """
-        # CORREÇÃO: Adicionado prefixo /api/v1/
         endpoint = f"/api/v1/worker/jobs/{job_id}/log"
         payload = {
             "level": level,
@@ -172,18 +123,6 @@ class RabbitMQWorker:
         return self._make_request("POST", endpoint, payload)
     
     def report_finish(self, job_id: str, status: str, result_data: Dict) -> bool:
-        """
-        Reporta finalização do job (sucesso ou falha)
-        
-        Args:
-            job_id: ID do job
-            status: Status final ("completed", "completed_no_invoices", "failed", etc.)
-            result_data: Dados do resultado da execução
-            
-        Returns:
-            True se reportado com sucesso
-        """
-        # CORREÇÃO: Adicionado prefixo /api/v1/
         endpoint = f"/api/v1/worker/jobs/{job_id}/finish"
         payload = {
             "status": status,
@@ -193,46 +132,30 @@ class RabbitMQWorker:
         return self._make_request("POST", endpoint, payload)
     
     def process_message(self, ch, method, properties, body):
-        """
-        Processa mensagem recebida do RabbitMQ
-        
-        Args:
-            ch: Canal
-            method: Método de entrega
-            properties: Propriedades da mensagem
-            body: Corpo da mensagem
-        """
         job_id = None
         
         try:
-            # Parse da mensagem
             message = json.loads(body)
             
-            # CORREÇÃO: Maestro envia "job_id" (com underscore), não "jobId"
             job_id = message.get("job_id")
             
             logger.info(f"📨 Mensagem recebida: {job_id}")
             logger.info(f"Payload: {json.dumps(message, indent=2)}")
             
-            # Extrair parâmetros aninhados do campo parameters
             params = message.get("parameters", {})
             
-            # Validar campos obrigatórios na raiz (job_id)
             if not job_id:
                 raise ValueError("Campo obrigatório 'job_id' não encontrado na mensagem")
             
-            # Validar campos obrigatórios em parameters
             required_fields = ['stores', 'document_type', 'start_date', 'end_date', 'gms_login_url']
             missing_fields = [field for field in required_fields if not params.get(field)]
             
             if missing_fields:
                 raise ValueError(f"Campos obrigatórios faltando em 'parameters': {', '.join(missing_fields)}")
             
-            # Reportar início da execução
             self.report_status_start(job_id)
             self.report_log(job_id, "INFO", f"Job {job_id} iniciado. Preparando execução...")
             
-            # Preparar parâmetros para o BotRunner
             bot_params = {
                 'headless': params.get('headless', True),
                 'stores': params.get('stores', []),
@@ -248,23 +171,18 @@ class RabbitMQWorker:
                 'gms_login_url': params.get('gms_login_url')
             }
             
-            # Log dos parâmetros
             self.report_log(job_id, "INFO", f"Processando {len(bot_params['stores'])} loja(s)")
             self.report_log(job_id, "INFO", f"Período: {bot_params['start_date']} a {bot_params['end_date']}")
             self.report_log(job_id, "INFO", f"Tipo de documento: {bot_params['document_type']}")
             
-            # Executar tarefa
             logger.info(f"🚀 Iniciando execução do job {job_id}")
             self.report_log(job_id, "INFO", "Iniciando execução da automação...")
             
-            # Criar instância do BotRunner passando job_id e callback de log
             bot_runner = BotRunner(bot_params, job_id=job_id, log_callback=self.report_log)
             result = bot_runner.run()
             
-            # Adicionar job_id ao resultado
             result['job_id'] = job_id
             
-            # Reportar resultado baseado no status
             if result.get("status") == "completed":
                 self.report_log(job_id, "INFO", "Automação concluída com sucesso!")
                 self.report_finish(job_id, "completed", result)
@@ -281,7 +199,6 @@ class RabbitMQWorker:
                 self.report_finish(job_id, "failed", result)
                 logger.error(f"❌ Job {job_id} falhou")
             
-            # ACK da mensagem
             ch.basic_ack(delivery_tag=method.delivery_tag)
             logger.info(f"✅ Mensagem processada e confirmada: {job_id}")
             
@@ -309,7 +226,6 @@ class RabbitMQWorker:
         except Exception as e:
             logger.error(f"❌ Erro ao processar mensagem: {e}", exc_info=True)
             
-            # Tentar reportar falha
             if job_id:
                 try:
                     self.report_log(job_id, "ERROR", f"Erro inesperado: {str(e)}")
@@ -320,11 +236,9 @@ class RabbitMQWorker:
                 except:
                     logger.error("Não foi possível reportar falha ao Maestro")
             
-            # NACK sem requeue (envia para DLQ se configurado)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
     
     def start(self):
-        """Inicia o worker"""
         logger.info("=" * 60)
         logger.info("🤖 Bot XML GMS Worker")
         logger.info("=" * 60)
@@ -335,10 +249,8 @@ class RabbitMQWorker:
         logger.info("=" * 60)
         
         try:
-            # Conectar ao RabbitMQ
             self.connect()
             
-            # Configurar consumidor
             self.channel.basic_consume(
                 queue=self.queue_name,
                 on_message_callback=self.process_message,
@@ -347,7 +259,6 @@ class RabbitMQWorker:
             
             logger.info("🎯 Worker pronto. Aguardando tarefas...")
             
-            # Iniciar consumo
             self.channel.start_consuming()
             
         except KeyboardInterrupt:
@@ -363,7 +274,6 @@ class RabbitMQWorker:
 
 
 def main():
-    """Função principal"""
     try:
         worker = RabbitMQWorker()
         worker.start()
@@ -371,7 +281,6 @@ def main():
     except Exception as e:
         logger.critical(f"Falha ao iniciar worker: {e}", exc_info=True)
         return 1
-
 
 if __name__ == "__main__":
     sys.exit(main())
