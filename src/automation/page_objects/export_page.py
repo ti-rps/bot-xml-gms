@@ -56,7 +56,6 @@ class ExportPage(BasePage):
                     self.click(self.selectors['export_button'])
                     logger.info("Clique no botão de exportar realizado.")
                     time.sleep(1)
-                    # ✨ FASE 2.3: Usar timeout configurado
                     if self.is_element_present(self.selectors['alert_msg'], timeout=settings.DEFAULT_TIMEOUT // 10):
                         alert_element = self._find_element(self.selectors['alert_msg'])
                         if "Não existem notas a serem exportadas para esse filtro." in alert_element.text:

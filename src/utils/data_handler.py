@@ -22,7 +22,6 @@ def read_json_file(file_path: str) -> List[Dict[str, Any]]:
     return []
 
 def load_yaml_file(file_path: str) -> Dict:
-    # ✨ FASE 3.1: Melhorar tratamento de erros com exceções customizadas
     logger.info(f"Carregando arquivo YAML de: {file_path}")
     try:
         with open(file_path, 'r', encoding='utf-8') as file:

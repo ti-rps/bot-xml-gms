@@ -48,7 +48,6 @@ class BotRunner:
         if not self.gms_user or not self.gms_password:
             raise ValueError("Credenciais GMS_USER e GMS_PASSWORD não foram encontradas nem nos parâmetros da API nem nas variáveis de ambiente.")
         
-        # ✨ FASE 2.2: Validações críticas
         if not self.gms_login_url:
             raise ValueError("Parâmetro obrigatório 'gms_login_url' não fornecido.")
         
@@ -61,12 +60,6 @@ class BotRunner:
         logger.info(f"🤖 BotRunner inicializado com sucesso - Job ID: {job_id}")
         
     def _update_status(self, message: str, progress: int = None):
-        """Atualiza status interno e envia para o orquestrador via callback.
-        
-        Args:
-            message (str): Mensagem de status a ser logada
-            progress (int, optional): Progresso da execução 0-100
-        """
         self.current_message = message
         if progress is not None:
             self.progress = progress
@@ -80,16 +73,8 @@ class BotRunner:
                 logger.warning(f"Falha ao enviar log para o Maestro via callback: {e}")
 
     def setup(self):
-        """Prepara o ambiente para execução da automação.
-        
-        Valida configurações, carrega seletores CSS/XPath e setá task_id para logging.
-        
-        Returns:
-            bool: True se setup foi bem sucedido, False caso contrário
-        """
         self._update_status("Preparando ambiente para a execução...", 5)
         
-        # ✨ Setar task_id para rastreabilidade nos logs
         if self.job_id:
             set_task_id(self.job_id)
         
@@ -110,28 +95,6 @@ class BotRunner:
         return True
     
     def run(self) -> Dict:
-        """Executa o fluxo completo da automação de extração de dados.
-        
-        Fluxo:
-        1. Valida setup e carrega configurações
-        2. Inicia navegador e faz login
-        3. Para cada loja: processa datas e exporta dados
-        4. Acessa página de exportação
-        5. Inicia download e extrai ZIP
-        6. Valida e organiza arquivos
-        7. Retorna resultado para orchestrador
-        
-        Returns:
-            Dict: Resultado da execução com status, timestamp, duração, resumo e erros
-                {
-                    'status': 'pending'|'success'|'failed'|'partial',
-                    'started_at': ISO timestamp,
-                    'completed_at': ISO timestamp,
-                    'duration_seconds': int,
-                    'summary': str,
-                    'error': str or None
-                }
-        """
         logger.info("🚀 --- INICIANDO AUTOMAÇÃO BOT-XML-GMS --- 🚀")
         start_time = datetime.now()
         
@@ -209,7 +172,6 @@ class BotRunner:
             logger.debug(f"✅ Resumo do processamento: {summary}")
             self._update_status("Processamento de arquivos concluído.", 100)
             
-            # Sucesso
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             logger.debug(f"Tempo total de execução: {duration:.2f}s")

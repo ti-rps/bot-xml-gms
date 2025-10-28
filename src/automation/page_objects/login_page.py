@@ -14,7 +14,6 @@ class LoginPage(BasePage):
         self.selectors = selectors
 
     def navigate_to_login_page(self, login_url):
-        # ✨ FASE 2.1: Não logar URL completa, apenas domínio
         try:
             domain = urlparse(login_url).netloc
             logger.info(f"Navegando para a página de login em: {domain}")
