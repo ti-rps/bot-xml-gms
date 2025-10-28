@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, Optional, Callable
 from src.automation.browser_handler import BrowserHandler
 from src.utils import data_handler
+from src.utils.logger_config import set_task_id
 from config import settings as config_settings
 from src.automation.page_objects.login_page import LoginPage
 from src.automation.page_objects.home_page import HomePage
@@ -62,6 +63,10 @@ class BotRunner:
 
     def setup(self):
         self._update_status("Preparando ambiente para a execução...", 5)
+        
+        # ✨ Setar task_id para rastreabilidade nos logs
+        if self.job_id:
+            set_task_id(self.job_id)
         
         if not self.stores_to_process:
             logger.warning("Nenhuma loja fornecida nos parâmetros para processar.")
