@@ -93,15 +93,20 @@ class BotRunner:
         if self.job_id:
             set_task_id(self.job_id)
         
+        logger.debug(f"Setup iniciado para job_id: {self.job_id}")
+        logger.debug(f"Lojas a processar: {self.stores_to_process}")
+        
         if not self.stores_to_process:
             logger.warning("Nenhuma loja fornecida nos parâmetros para processar.")
             return False
         
+        logger.debug(f"Carregando seletores de: {config_settings.SELECTORS_FILE}")
         self.selectors = data_handler.load_yaml_file(config_settings.SELECTORS_FILE)
         if not self.selectors:
             logger.error("Falha ao carregar seletores. A automação não pode continuar.")
             return False
         
+        logger.debug(f"✅ Seletores carregados com sucesso. Total: {len(self.selectors)} seções")
         return True
     
     def run(self) -> Dict:
@@ -153,11 +158,14 @@ class BotRunner:
         
         try:
             self._update_status("Iniciando o navegador...", 10)
+            logger.debug(f"Configuração de headless: {self.headless}")
             driver = self.browser_handler.start_browser()
             if not driver:
                 raise ConnectionError("Driver do navegador não foi inicializado.")
+            logger.debug("✅ Driver do navegador iniciado com sucesso")
 
             self._update_status("Iniciando processo de login...", 20)
+            logger.debug(f"Tentando login na URL: {self.gms_login_url.split('/')[2]}")
             login_page = LoginPage(driver, self.selectors.get('login_page', {}))
             login_page.navigate_to_login_page(self.gms_login_url)
             
@@ -165,32 +173,46 @@ class BotRunner:
             verification_selector = home_page_selectors.get('sidebar_tax')
             if not verification_selector:
                 raise ValueError("Seletor de verificação pós-login ('sidebar_tax') não encontrado em selectors.yaml")
-                
+            
+            logger.debug(f"Executando login com usuário: {self.gms_user}")
             login_page.execute_login(self.gms_user, self.gms_password, verification_selector)
+            logger.debug("✅ Login executado com sucesso")
 
             self._update_status("Login realizado com sucesso!", 30)
 
             self._update_status("Navegando na página inicial...", 40)
             home_page = HomePage(driver, self.selectors.get('home_page', {}))
+            logger.debug(f"Navegando para página de exportação")
             home_page.navigate_sidebar_export()
 
             self._update_status("Iniciando processo de exportação...", 50)
+            logger.debug(f"Parâmetros de exportação: doc_type={self.document_type}, emitter={self.emitter}, op={self.operation_type}")
+            logger.debug(f"Período: {self.start_date} até {self.end_date}")
+            logger.debug(f"Lojas: {self.stores_to_process}")
             export_page = ExportPage(driver, self.selectors.get('export_page', {}))
             export_page.export_data(self.document_type, self.emitter, self.operation_type, self.file_type, self.invoice_situation, self.start_date, self.end_date, self.stores_to_process)
+            logger.debug("✅ Dados de exportação enviados para GMS")
             
             self._update_status("Aguardando a conclusão da exportação no sistema GMS...", 60)
+            logger.debug("Aguardando conclusão da exportação...")
             export_page.wait_for_export_completion()
+            logger.debug("✅ Exportação concluída no GMS")
             
             self._update_status("Realizando o download dos arquivos exportados...", 70)
+            logger.debug("Iniciando download dos arquivos...")
             export_page.download_exports()
+            logger.debug("✅ Download dos arquivos concluído")
 
             self._update_status("Processando arquivos baixados (descompactando e organizando)...", 80)
+            logger.debug("Processando arquivos baixados...")
             summary = file_handler.process_downloaded_files(self.document_type, self.start_date, self.end_date)
+            logger.debug(f"✅ Resumo do processamento: {summary}")
             self._update_status("Processamento de arquivos concluído.", 100)
             
             # Sucesso
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
+            logger.debug(f"Tempo total de execução: {duration:.2f}s")
             
             result.update({
                 "status": "completed",
@@ -202,6 +224,7 @@ class BotRunner:
             logger.info(f"✅ Automação concluída com sucesso em {duration:.2f}s")
 
         except NoInvoicesFoundException as e:
+            logger.debug(f"NoInvoicesFoundException capturada: {type(e).__name__}")
             logger.warning(f"Processo encerrado conforme esperado: {e}")
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -214,6 +237,7 @@ class BotRunner:
             })
 
         except AutomationException as e:
+            logger.debug(f"AutomationException capturada: {type(e).__name__}")
             logger.error(f"ERRO DE PROCESSO: {e}", exc_info=True)
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -226,6 +250,7 @@ class BotRunner:
             })
             
         except Exception as e:
+            logger.debug(f"Exception genérica capturada: {type(e).__name__}")
             logger.critical("ERRO INESPERADO: Ocorreu uma falha crítica na orquestração.", exc_info=True)
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
