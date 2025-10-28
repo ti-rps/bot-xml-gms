@@ -1,5 +1,6 @@
 import logging
 import time
+from urllib.parse import urlparse
 from selenium.webdriver.remote.webdriver import WebDriver
 from .base_page import BasePage
 from src.utils.exceptions import LoginError
@@ -13,7 +14,12 @@ class LoginPage(BasePage):
         self.selectors = selectors
 
     def navigate_to_login_page(self, login_url):
-        logger.info(f"Navegando para a página de login: {login_url}")
+        # ✨ FASE 2.1: Não logar URL completa, apenas domínio
+        try:
+            domain = urlparse(login_url).netloc
+            logger.info(f"Navegando para a página de login em: {domain}")
+        except Exception:
+            logger.info("Navegando para a página de login...")
         self.driver.get(login_url)
 
     def execute_login(self, username, password, verification_selector: str):
