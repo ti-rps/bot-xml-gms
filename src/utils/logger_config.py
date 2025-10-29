@@ -17,15 +17,6 @@ def set_task_id(task_id):
     _thread_locals.task_id = task_id
 
 def setup_logger():
-    """Configura o logging para o projeto.
-    
-    Define handlers para console e arquivo (apenas em ambiente de desenvolvimento).
-    Filtra logs de bibliotecas externas (Selenium, urllib3).
-    
-    Variáveis de ambiente:
-        - LOG_ENV: 'development' para ativar logging em arquivo
-        - LOG_LEVEL: Nível de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    """
     log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
     log_format = logging.Formatter(
         "%(asctime)s - %(levelname)s - [task_id=%(task_id)s] - [%(filename)s:%(lineno)d] - %(message)s"
@@ -39,20 +30,17 @@ def setup_logger():
 
     root_logger.addFilter(TaskIdFilter())
 
-    # Handler para console (sempre ativo)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(log_level)
     console_handler.setFormatter(log_format)
     root_logger.addHandler(console_handler)
 
-    # Handler para arquivo (apenas em desenvolvimento)
     log_env = os.getenv('LOG_ENV', '').strip().lower()
     if log_env == 'development':
         try:
             log_dir = settings.LOGS_DIR
             log_dir.mkdir(parents=True, exist_ok=True)
             
-            # Usar arquivo único com rotação, não diário
             log_filename = log_dir / "bot_dev.log"
 
             file_handler = logging.handlers.RotatingFileHandler(
@@ -69,7 +57,6 @@ def setup_logger():
         except Exception as e:
             root_logger.warning(f"⚠️  Falha ao configurar file handler: {e}")
 
-    # Suprimir logs verbosos de bibliotecas externas
     logging.getLogger("selenium").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("pika").setLevel(logging.WARNING)
