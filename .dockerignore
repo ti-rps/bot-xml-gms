@@ -1,14 +1,64 @@
 # .dockerignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 venv/
 .venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 .pytest_cache/
 .coverage
-.git/
-.idea/
+htmlcov/
+
+# IDEs
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Dados locais (serão montados como volumes)
 downloads/
 logs/
+*.log
+
+# Env (será passado via docker-compose)
+.env.local
+.env.*.local
+
+# Docker
+docker-compose.override.yml
+
+# Documentação
+README.md
+docs/
+
+# Testes
+tests/

@@ -1,30 +1,34 @@
-# docker-compose.yml
 services:
-  redis:
-    image: "redis:alpine"
-    ports:
-      - "6379:6379"
 
-  api:
-    build: .
-    command: uvicorn api:app --host 0.0.0.0 --port 8000
-    volumes:
-      - ./downloads:/app/downloads
-      - ./logs:/app/logs
-    ports:
-      - "8000:8000"
-    depends_on:
-      - redis
+  gms-xml-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gms-xml-worker
     environment:
-      - LOG_ENV=development
+      - RABBITMQ_HOST=maestro_rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASSWORD=guest
+      - RABBITMQ_QUEUE=automation_jobs
 
-  worker:
-    build: .
-    command: celery -A tasks worker --loglevel=info
-    volumes:
-      - ./downloads:/app/downloads
-      - ./logs:/app/logs
-    depends_on:
-      - redis
-    environment:
-      - LOG_ENV=development
+      - MAESTRO_DB_HOST=maestro_postgres
+      - MAESTRO_DB_PORT=5432
+      - MAESTRO_DB_USER=user
+      - MAESTRO_DB_PASSWORD=password
+      - MAESTRO_DB_NAME=maestro_db
+
+      - GMS_USER=${GMS_USER}
+      - GMS_PASSWORD=${GMS_PASSWORD}
+      - WORKER_ID=gms-worker-01
+      - LOG_LEVEL=INFO
+
+      - MAESTRO_API_URL=http://maestro-backend:8000
+
+    networks:
+      - maestro-network
+    restart: unless-stopped
+
+networks:
+  maestro-network:
+    external: true

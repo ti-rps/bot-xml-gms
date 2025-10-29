@@ -40,7 +40,6 @@ class BrowserHandler:
             return None
 
     def close_browser(self):
-        # ... (sem mudanças aqui)
         if self.driver:
             logger.info("Fechando o navegador.")
             self.driver.quit()

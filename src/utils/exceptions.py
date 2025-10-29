@@ -20,6 +20,10 @@ class ElementNotFoundError(AutomationException):
     """Lançada quando um elemento crucial não é encontrado na página."""
     pass
 
+class ConfigurationError(AutomationException):
+    """Lançada quando há erro ao carregar configurações (selectors, env, etc)."""
+    pass
+
 class NoInvoicesFoundException(Exception):
     """Exceção levantada quando nenhuma nota fiscal é encontrada para os filtros de exportação."""
     pass
