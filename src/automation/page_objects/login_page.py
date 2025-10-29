@@ -1,7 +1,10 @@
 import logging
 import time
+from urllib.parse import urlparse
 from selenium.webdriver.remote.webdriver import WebDriver
 from .base_page import BasePage
+from src.utils.exceptions import LoginError
+from selenium.common.exceptions import TimeoutException
 
 logger = logging.getLogger(__name__)
 
@@ -11,16 +14,28 @@ class LoginPage(BasePage):
         self.selectors = selectors
 
     def navigate_to_login_page(self, login_url):
-        logger.info(f"Navegando para a página de login: {login_url}")
+        try:
+            domain = urlparse(login_url).netloc
+            logger.info(f"Navegando para a página de login em: {domain}")
+        except Exception:
+            logger.info("Navegando para a página de login...")
         self.driver.get(login_url)
 
-    def execute_login(self, username, password):
+    def execute_login(self, username, password, verification_selector: str):
         try:
             logger.info("Preenchendo credenciais de login.")
             self.send_keys(self.selectors['username_input'], username)
             self.send_keys(self.selectors['password_input'], password)
             time.sleep(1)
             self.click(self.selectors['login_button'])
+
+            logger.info("Verificando se o login foi bem-sucedido...")
+            self.wait_for_element(verification_selector)
+            logger.info("Verificação pós-login bem-sucedida. Dashboard carregado.")
+
+        except TimeoutException:
+            logger.error("Falha na verificação pós-login. O elemento esperado não apareceu. Verifique as credenciais ou a estabilidade do site.")
+            raise LoginError("O login falhou. A página principal não foi carregada após a tentativa de login.")
         except KeyError as e:
             logger.error(f"Seletor não encontrado no dicionário para a página de login: {e}")
             raise

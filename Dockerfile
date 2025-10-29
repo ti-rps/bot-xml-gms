@@ -1,6 +1,8 @@
 # Dockerfile
 FROM python:3.9-slim
 
+ENV PYTHONUNBUFFERED=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   gnupg \
@@ -28,3 +30,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Criar diretórios necessários
+RUN mkdir -p /app/downloads/pending /app/downloads/processed /app/logs
+
+# Variáveis de ambiente padrão
+ENV PYTHONUNBUFFERED=1
+ENV CHROME_DRIVER_PATH=/usr/local/bin/chromedriver
+
+# Executar o worker
+CMD ["python", "worker.py"]
