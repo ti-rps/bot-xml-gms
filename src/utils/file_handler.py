@@ -12,6 +12,42 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
+def cleanup_pending_directory():
+    pending_dir = settings.PENDING_DIR
+    errors = []
+    
+    logger.info("🧹 Iniciando limpeza do diretório pending/...")
+    
+    if not pending_dir.exists():
+        logger.warning(f"Diretório pending/ não existe: {pending_dir}")
+        return
+    
+    items = list(pending_dir.iterdir())
+    if not items:
+        logger.info("✅ Diretório pending/ já está vazio")
+        return
+    
+    logger.info(f"Encontrados {len(items)} itens para limpar")
+    
+    for item in items:
+        try:
+            if item.is_file():
+                item.unlink()
+                logger.debug(f"Removido arquivo: {item.name}")
+            elif item.is_dir():
+                shutil.rmtree(item)
+                logger.debug(f"Removido diretório: {item.name}")
+        except Exception as e:
+            error_msg = f"{item.name}: {e}"
+            errors.append(error_msg)
+            logger.error(f"❌ Erro ao remover {item.name}: {e}")
+    
+    if errors:
+        logger.warning(f"⚠️ Limpeza concluída com {len(errors)} erro(s): {errors}")
+    else:
+        logger.info("✅ Diretório pending/ completamente limpo")
+
+
 def log_directory_state(directory: Path, header: str):
     logger.info(f"--- {header} ---")
     if not directory.exists() or not directory.is_dir():
@@ -170,7 +206,6 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
 
     pending_dir = settings.PENDING_DIR
     processed_dir = settings.PROCESSED_DIR
-    initial_zip_path = pending_dir / "documentos_eletronicos.zip"
     
     second_zip_path = None
     second_extract_folder = None
@@ -178,6 +213,19 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
     final_destination_path = None
     
     try:
+        logger.info("🔍 Procurando o arquivo ZIP inicial no diretório 'pending'...")
+        initial_zip_candidates = list(pending_dir.glob('*.zip'))
+        
+        if not initial_zip_candidates:
+            raise FileNotFoundError("Nenhum arquivo ZIP foi encontrado em 'pending' após o download")
+        
+        if len(initial_zip_candidates) > 1:
+            logger.warning(f"⚠️ Múltiplos ZIPs encontrados: {[f.name for f in initial_zip_candidates]}. Usando o mais recente.")
+            initial_zip_path = max(initial_zip_candidates, key=lambda p: p.stat().st_mtime)
+        else:
+            initial_zip_path = initial_zip_candidates[0]
+        
+        logger.info(f"✅ Arquivo ZIP inicial encontrado: '{initial_zip_path.name}'")
         wait_for_file(initial_zip_path)
 
         logger.info(f"Descompactando '{initial_zip_path.name}'...")
@@ -272,20 +320,12 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
         operation_successful = False
         raise
     finally:
-        if operation_successful:
-            logger.info("Operação bem-sucedida. Realizando limpeza do diretório 'pending'...")
-            if initial_zip_path and initial_zip_path.exists():
-                initial_zip_path.unlink()
-                logger.info(f"Removido: {initial_zip_path.name}")
-            if second_zip_path and second_zip_path.exists():
-                second_zip_path.unlink()
-                logger.info(f"Removido: {second_zip_path.name}")
-            if second_extract_folder and second_extract_folder.exists():
-                shutil.rmtree(second_extract_folder)
-                logger.info(f"Removido diretório: {second_extract_folder.name}")
-            logger.info("Limpeza concluída.")
-        else:
-            logger.warning("A operação falhou. Nenhum arquivo temporário será removido de 'pending' para permitir análise manual.")
+
+        logger.info("🧹 Iniciando limpeza do diretório 'pending'...")
+        try:
+            cleanup_pending_directory()
+        except Exception as cleanup_error:
+            logger.critical(f"❌ Falha crítica ao limpar diretório pending/: {cleanup_error}", exc_info=True)
 
         logger.info("Verificando estado final dos diretórios...")
         log_directory_state(pending_dir, "ESTADO FINAL DO DIRETÓRIO 'PENDING'")

@@ -35,7 +35,7 @@ class RabbitMQWorker:
         signal.signal(signal.SIGTERM, self._signal_handler)
     
     def _signal_handler(self, signum, frame):
-        logger.info(f"Recebido sinal {signum}. Encerrando gracefully...")
+        logger.info(f"Recebido sinal {signum}. Encerrando...")
         self.should_stop = True
         if self.connection and not self.connection.is_closed:
             self.connection.close()
@@ -233,8 +233,10 @@ class RabbitMQWorker:
                         "error": str(e),
                         "error_type": type(e).__name__
                     })
-                except:
-                    logger.error("Não foi possível reportar falha ao Maestro")
+                except requests.exceptions.RequestException as api_error:
+                    logger.critical(f"❌ FALHA CRÍTICA ao reportar falha ao Maestro (problema de conexão/rede): {api_error}", exc_info=True)
+                except Exception as unexpected_error:
+                    logger.critical(f"❌ FALHA CRÍTICA ao reportar falha ao Maestro (erro inesperado): {unexpected_error}", exc_info=True)
             
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
     
