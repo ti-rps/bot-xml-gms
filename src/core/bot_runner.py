@@ -122,10 +122,41 @@ class BotRunner:
         try:
             self._update_status("Iniciando o navegador...", 10)
             logger.debug(f"Configuração de headless: {self.headless}")
-            driver = self.browser_handler.start_browser()
+            
+            MAX_BROWSER_RETRIES = 3
+            driver = None
+            
+            for attempt in range(1, MAX_BROWSER_RETRIES + 1):
+                try:
+                    logger.info(f"Tentativa {attempt}/{MAX_BROWSER_RETRIES} de inicializar o navegador...")
+                    driver = self.browser_handler.start_browser()
+                    
+                    if not driver:
+                        raise ConnectionError("Driver do navegador não foi inicializado.")
+                    
+                    logger.debug("✅ Driver do navegador iniciado com sucesso")
+                    break
+                    
+                except Exception as browser_error:
+                    logger.warning(f"⚠️ Falha na tentativa {attempt}/{MAX_BROWSER_RETRIES} de iniciar o navegador: {browser_error}")
+                    
+                    try:
+                        if self.browser_handler and self.browser_handler.driver:
+                            self.browser_handler.close_browser()
+                    except:
+                        pass
+                    
+                    if attempt < MAX_BROWSER_RETRIES:
+                        import time
+                        wait_time = attempt * 2
+                        logger.info(f"Aguardando {wait_time}s antes de tentar novamente...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"❌ Todas as {MAX_BROWSER_RETRIES} tentativas de iniciar o navegador falharam")
+                        raise ConnectionError(f"Não foi possível inicializar o navegador após {MAX_BROWSER_RETRIES} tentativas")
+            
             if not driver:
-                raise ConnectionError("Driver do navegador não foi inicializado.")
-            logger.debug("✅ Driver do navegador iniciado com sucesso")
+                raise ConnectionError("Driver do navegador não foi inicializado após todas as tentativas.")
 
             self._update_status("Iniciando processo de login...", 20)
             logger.debug(f"Tentando login na URL: {self.gms_login_url.split('/')[2]}")
