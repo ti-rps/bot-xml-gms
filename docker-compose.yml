@@ -28,6 +28,8 @@ services:
     networks:
       - maestro-network
     restart: unless-stopped
+    volumes:
+      - C:\Automations\bot-xml-gms\downloads:/app/downloads
 
 networks:
   maestro-network:
