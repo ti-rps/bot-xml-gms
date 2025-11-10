@@ -15,41 +15,33 @@ class Settings(BaseSettings):
         extra="ignore"
     )
     
-    # Identificação do Worker
     worker_id: str = Field(default_factory=lambda: f"worker-{socket.gethostname()}")
     
-    # Credenciais GMS
     gms_username: str = Field(default="", alias="GMS_USER")
     gms_password: str = Field(default="", alias="GMS_PASSWORD")
     
-    # RabbitMQ
     rabbitmq_host: str = Field(default="localhost")
     rabbitmq_port: int = Field(default=5672)
     rabbitmq_user: str = Field(default="guest")
     rabbitmq_password: str = Field(default="guest")
     rabbitmq_queue: str = Field(default="bot-xml-tasks")
     
-    # Maestro API
     maestro_api_url: str = Field(default="http://localhost:8080")
 
-    # Banco de Dados Maestro
     maestro_db_host: str = Field(default="postgres")
     maestro_db_port: int = Field(default=5432)
     maestro_db_user: str = Field(default="user")
     maestro_db_password: str = Field(default="password")
     maestro_db_name: str = Field(default="maestro_db")
     
-    # Caminhos
     base_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent)
     chrome_driver_path: Optional[str] = None
     
-    # Timeouts
     page_load_timeout: int = Field(default=30, ge=5, le=120)
     implicit_wait: int = Field(default=10, ge=1, le=60)
     download_timeout: int = Field(default=300, ge=60, le=600)
     default_timeout: int = Field(default=30)
     
-    # Logging
     log_level: str = Field(default="INFO")
     log_file: str = "logs/bot.log"
     log_max_bytes: int = Field(default=10485760)
