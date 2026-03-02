@@ -199,6 +199,11 @@ class BotRunner:
 
             self._update_status("Processando arquivos baixados (descompactando e organizando)...", 80)
             logger.debug("Processando arquivos baixados...")
+            
+            # Log do estado do diretório pending antes do processamento
+            pending_files = list(config_settings.PENDING_DIR.glob('*'))
+            logger.info(f"Arquivos no diretório pending antes do processamento: {[f.name for f in pending_files]}")
+            
             summary = file_handler.process_downloaded_files(self.document_type, self.start_date, self.end_date)
             logger.debug(f"✅ Resumo do processamento: {summary}")
             self._update_status("Processamento de arquivos concluído.", 100)
@@ -232,6 +237,8 @@ class BotRunner:
         except AutomationException as e:
             logger.debug(f"AutomationException capturada: {type(e).__name__}")
             logger.error(f"ERRO DE PROCESSO: {e}", exc_info=True)
+            if self.browser_handler:
+                self.browser_handler.take_screenshot("automation_error")
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
@@ -245,6 +252,8 @@ class BotRunner:
         except Exception as e:
             logger.debug(f"Exception genérica capturada: {type(e).__name__}")
             logger.critical("ERRO INESPERADO: Ocorreu uma falha crítica na orquestração.", exc_info=True)
+            if self.browser_handler:
+                self.browser_handler.take_screenshot("critical_error")
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
