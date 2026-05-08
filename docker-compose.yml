@@ -10,7 +10,7 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=guest
       - RABBITMQ_PASSWORD=guest
-      - RABBITMQ_QUEUE=automation_jobs
+      - RABBITMQ_QUEUE=bot-xml-tasks
 
       - MAESTRO_DB_HOST=maestro_postgres
       - MAESTRO_DB_PORT=5432
