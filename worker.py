@@ -66,7 +66,7 @@ class RabbitMQWorker:
                 self.connection = pika.BlockingConnection(parameters)
                 self.channel = self.connection.channel()
                 
-                self.channel.queue_declare(queue=self.queue_name, durable=True)
+                self.channel.queue_declare(queue=self.queue_name, durable=True, arguments={"x-dead-letter-exchange": "maestro.dlx"})
                 
                 self.channel.basic_qos(prefetch_count=1)
                 
