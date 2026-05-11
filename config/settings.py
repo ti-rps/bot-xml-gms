@@ -66,7 +66,12 @@ class Settings(BaseSettings):
     
     @property
     def PENDING_DIR(self) -> Path:
-        path = self.DOWNLOADS_DIR / "pending"
+        # WHY: in containers the downloads dir is often a host bind-mount
+        # (e.g. /mnt/c/... on WSL). Extracting thousands of XMLs there
+        # triggers cross-fs permission errors on move and ENOMEM on traversal.
+        # Keep pending on the container's native fs; only processed/ stays on the mount.
+        override = os.environ.get("BOT_PENDING_DIR")
+        path = Path(override) if override else Path("/tmp/bot-xml-gms/pending")
         path.mkdir(parents=True, exist_ok=True)
         return path
     

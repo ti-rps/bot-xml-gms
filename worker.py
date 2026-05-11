@@ -4,6 +4,7 @@ import json
 import time
 import signal
 import sys
+import threading
 from typing import Dict, Optional
 import pika
 import requests
@@ -13,6 +14,10 @@ from pathlib import Path
 from config import settings
 from src.core.bot_runner import BotRunner
 from src.utils.exceptions import ConfigurationError, ElementNotFoundError, LoginError
+
+# Interval (seconds) between heartbeat pumps while a long job runs in a thread.
+# Keep well below RabbitMQ heartbeat (600s) so two consecutive misses are impossible.
+_HEARTBEAT_PUMP_INTERVAL = 30
 
 logging.config.dictConfig(settings.get_log_config())
 logger = logging.getLogger(__name__)
@@ -131,6 +136,42 @@ class RabbitMQWorker:
         }
         logger.info(f"🏁 Reportando finalização do job {job_id} com status: {status}")
         return self._make_request("POST", endpoint, payload)
+
+    def _run_bot_with_heartbeat(self, bot_params: Dict, job_id: str) -> Dict:
+        """Run BotRunner on a worker thread; pump pika data events on the main
+        thread so heartbeats stay alive during long (~1h) GMS exports.
+
+        Returns the bot's result dict, or re-raises whatever the bot raised.
+        """
+        result_holder: Dict = {}
+        exc_holder: Dict = {}
+
+        def _target():
+            try:
+                bot_runner = BotRunner(bot_params, job_id=job_id, log_callback=self.report_log)
+                result_holder["result"] = bot_runner.run()
+            except BaseException as e:  # capture everything; main thread re-raises
+                exc_holder["exc"] = e
+
+        thread = threading.Thread(target=_target, name=f"bot-{job_id}", daemon=True)
+        thread.start()
+
+        while thread.is_alive():
+            # process_data_events drives the heartbeat frames and detects a dead
+            # connection early. We don't expect to receive other messages here
+            # because prefetch_count=1 and we haven't ack'd yet.
+            try:
+                self.connection.process_data_events(time_limit=_HEARTBEAT_PUMP_INTERVAL)
+            except Exception as e:
+                # If the connection died mid-job, keep waiting for the bot to
+                # finish so we don't leak a browser; reconnection happens after.
+                logger.warning(f"⚠️ process_data_events falhou durante job longo: {e}")
+                thread.join()
+                raise
+
+        if "exc" in exc_holder:
+            raise exc_holder["exc"]
+        return result_holder.get("result", {})
     
     def process_message(self, ch, method, properties, body):
         job_id = None
@@ -178,10 +219,9 @@ class RabbitMQWorker:
             
             logger.info(f"🚀 Iniciando execução do job {job_id}")
             self.report_log(job_id, "INFO", "Iniciando execução da automação...")
-            
-            bot_runner = BotRunner(bot_params, job_id=job_id, log_callback=self.report_log)
-            result = bot_runner.run()
-            
+
+            result = self._run_bot_with_heartbeat(bot_params, job_id)
+
             result['job_id'] = job_id
             
             if result.get("status") == "completed":
