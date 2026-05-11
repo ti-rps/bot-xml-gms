@@ -15,35 +15,41 @@ logger = logging.getLogger(__name__)
 def cleanup_pending_directory():
     pending_dir = settings.PENDING_DIR
     errors = []
-    
+
     logger.info("🧹 Iniciando limpeza do diretório pending/...")
-    
+
     if not pending_dir.exists():
         logger.warning(f"Diretório pending/ não existe: {pending_dir}")
         return
-    
+
     items = list(pending_dir.iterdir())
     if not items:
         logger.info("✅ Diretório pending/ já está vazio")
         return
-    
+
     logger.info(f"Encontrados {len(items)} itens para limpar")
-    
+
+    def _on_rmtree_error(func, path, exc_info):
+        errors.append(f"{path}: {exc_info[1]}")
+        logger.debug(f"Falha ao remover {path}: {exc_info[1]}")
+
     for item in items:
         try:
-            if item.is_file():
-                item.unlink()
-                logger.debug(f"Removido arquivo: {item.name}")
+            if item.is_file() or item.is_symlink():
+                try:
+                    item.unlink()
+                except FileNotFoundError:
+                    pass
             elif item.is_dir():
-                shutil.rmtree(item)
-                logger.debug(f"Removido diretório: {item.name}")
+                shutil.rmtree(item, onerror=_on_rmtree_error)
         except Exception as e:
-            error_msg = f"{item.name}: {e}"
-            errors.append(error_msg)
-            logger.error(f"❌ Erro ao remover {item.name}: {e}")
-    
+            errors.append(f"{item.name}: {e}")
+            logger.debug(f"Erro ao remover {item.name}: {e}")
+
     if errors:
-        logger.warning(f"⚠️ Limpeza concluída com {len(errors)} erro(s): {errors}")
+        # WHY warning, not error: pending is ephemeral; residual files don't break
+        # the next run because we delete the destination before moving.
+        logger.warning(f"⚠️ Limpeza concluída com {len(errors)} item(ns) residual(is). Primeiros: {errors[:3]}")
     else:
         logger.info("✅ Diretório pending/ completamente limpo")
 
@@ -308,10 +314,19 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
             logger.warning("A pasta de origem está vazia. Nenhuma pasta ou arquivo para mover.")
             operation_successful = True
         else:
-            logger.info(f"Movendo {len(items_to_move)} item(ns) para o destino final...")
+            # WHY copy instead of move: pending is on the container's local fs and
+            # processed is on a host bind-mount (different filesystems). shutil.move
+            # then falls back to copy+unlink, and the unlink half is flaky on the
+            # mount, leaving partial state and raising PermissionError mid-loop.
+            # We copy here; cleanup_pending_directory removes the source tolerantly.
+            logger.info(f"Copiando {len(items_to_move)} item(ns) para o destino final...")
             for item in items_to_move:
-                shutil.move(str(item), str(final_destination_path / item.name))
-            logger.info("✅ Itens movidos com sucesso!")
+                dst = final_destination_path / item.name
+                if item.is_dir():
+                    shutil.copytree(str(item), str(dst), dirs_exist_ok=True)
+                else:
+                    shutil.copy2(str(item), str(dst))
+            logger.info("✅ Itens copiados com sucesso!")
             operation_successful = True
 
     except Exception as e:

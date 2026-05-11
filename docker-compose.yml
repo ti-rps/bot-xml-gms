@@ -30,6 +30,14 @@ services:
     restart: unless-stopped
     volumes:
       - /mnt/c/Automations/bot-xml-gms/downloads:/app/downloads
+    # Pending downloads stay on the container's overlay fs (default
+    # /tmp/bot-xml-gms/pending). Override only if you need to point pending
+    # somewhere else; do NOT point it at /app/downloads (host bind-mount on WSL
+    # breaks file moves and traversal of thousands of XMLs).
+    # tmpfs sizing: ~5x the largest expected ZIP (we have to hold the original
+    # ZIP, the inner ZIP, and the extracted XML tree simultaneously).
+    tmpfs:
+      - /tmp/bot-xml-gms:size=4g,mode=1777
 
 networks:
   maestro-network:
