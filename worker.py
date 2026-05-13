@@ -5,6 +5,7 @@ import time
 import signal
 import sys
 import threading
+from datetime import datetime, timezone
 from typing import Dict, Optional
 import pika
 import requests
@@ -13,11 +14,17 @@ from pathlib import Path
 
 from config import settings
 from src.core.bot_runner import BotRunner
+from src.utils.cancellation_watcher import CancellationWatcher
 from src.utils.exceptions import ConfigurationError, ElementNotFoundError, LoginError
 
 # Interval (seconds) between heartbeat pumps while a long job runs in a thread.
 # Keep well below RabbitMQ heartbeat (600s) so two consecutive misses are impossible.
 _HEARTBEAT_PUMP_INTERVAL = 30
+
+# Cadência do polling de cancelamento. 15s dá ~20 polls de margem dentro da
+# janela de 5min do retry worker do maestro (last_heartbeat_at), e mantém a
+# latência clique-Cancelar → worker abortar em ~15s + a sleep ativa do bot.
+_CANCELLATION_POLL_INTERVAL = 15.0
 
 logging.config.dictConfig(settings.get_log_config())
 logger = logging.getLogger(__name__)
@@ -86,33 +93,70 @@ class RabbitMQWorker:
                 else:
                     raise
     
+    def _headers(self) -> Dict[str, str]:
+        # WHY: middleware do maestro tem bypass-se-vazio. Quando MAESTRO_WORKER_API_KEY
+        # não está populada, o worker não envia o header e o maestro aceita.
+        # Quando populada, mandamos em todos os callbacks (start/log/finish/cancellation)
+        # — coerência total, não dá pra metade autenticar e metade não.
+        headers = {"Content-Type": "application/json"}
+        if settings.maestro_worker_api_key:
+            headers["X-Worker-API-Key"] = settings.maestro_worker_api_key
+        return headers
+
     def _make_request(self, method: str, endpoint: str, payload: Optional[Dict] = None) -> bool:
         try:
             url = f"{self.maestro_url.rstrip('/')}/{endpoint.lstrip('/')}"
-            
+
             logger.debug(f"Fazendo requisição {method} para {url}")
-            
+
             response = requests.request(
                 method=method,
                 url=url,
                 json=payload,
                 timeout=10,
-                headers={"Content-Type": "application/json"}
+                headers=self._headers()
             )
-            
+
             if response.status_code in [200, 201, 204]:
                 logger.debug(f"✅ Requisição bem sucedida: {method} {endpoint}")
                 return True
             else:
                 logger.warning(f"⚠️ Falha na requisição. HTTP {response.status_code}: {response.text}")
                 return False
-                
+
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ Erro ao fazer requisição para Maestro: {e}")
             return False
         except Exception as e:
             logger.error(f"❌ Erro inesperado ao fazer requisição: {e}")
             return False
+
+    def check_cancellation(self, job_id: str) -> bool:
+        """Polla o endpoint de cancelamento do maestro.
+
+        Cada chamada também atualiza last_heartbeat_at no maestro — é o sinal
+        de vida que o retry worker usa pra detectar worker morto (janela 5min).
+
+        Retorna True se o usuário pediu cancelamento, False caso contrário.
+        Propaga exceções em erros transientes (rede/timeout/5xx) para que o
+        CancellationWatcher logue warning e tente de novo no próximo ciclo
+        sem derrubar o job. 404 não propaga: trata como "sem cancelamento".
+        """
+        url = f"{self.maestro_url.rstrip('/')}/api/v1/worker/jobs/{job_id}/cancellation"
+        response = requests.get(url, headers=self._headers(), timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+            return bool(data.get("cancellation_requested", False))
+
+        if response.status_code == 404:
+            # Job sumiu do maestro — não derruba o job em execução, só loga.
+            logger.warning(f"check_cancellation: job {job_id} retornou 404 (job não encontrado)")
+            return False
+
+        # 400 (UUID inválido) e 5xx: propaga pro watcher tratar como transiente.
+        response.raise_for_status()
+        return False
     
     def report_status_start(self, job_id: str) -> bool:
         endpoint = f"/api/v1/worker/jobs/{job_id}/start"
@@ -137,9 +181,18 @@ class RabbitMQWorker:
         logger.info(f"🏁 Reportando finalização do job {job_id} com status: {status}")
         return self._make_request("POST", endpoint, payload)
 
-    def _run_bot_with_heartbeat(self, bot_params: Dict, job_id: str) -> Dict:
+    def _run_bot_with_heartbeat(
+        self,
+        bot_params: Dict,
+        job_id: str,
+        cancel_event: Optional[threading.Event] = None,
+    ) -> Dict:
         """Run BotRunner on a worker thread; pump pika data events on the main
         thread so heartbeats stay alive during long (~1h) GMS exports.
+
+        cancel_event é repassado pro BotRunner pra que os loops longos de
+        polling do Selenium possam abortar quando o CancellationWatcher
+        sinalizar.
 
         Returns the bot's result dict, or re-raises whatever the bot raised.
         """
@@ -148,7 +201,12 @@ class RabbitMQWorker:
 
         def _target():
             try:
-                bot_runner = BotRunner(bot_params, job_id=job_id, log_callback=self.report_log)
+                bot_runner = BotRunner(
+                    bot_params,
+                    job_id=job_id,
+                    log_callback=self.report_log,
+                    cancel_event=cancel_event,
+                )
                 result_holder["result"] = bot_runner.run()
             except BaseException as e:  # capture everything; main thread re-raises
                 exc_holder["exc"] = e
@@ -220,20 +278,42 @@ class RabbitMQWorker:
             logger.info(f"🚀 Iniciando execução do job {job_id}")
             self.report_log(job_id, "INFO", "Iniciando execução da automação...")
 
-            result = self._run_bot_with_heartbeat(bot_params, job_id)
+            # Watcher vive entre /start e /finish. Cada GET dele atualiza
+            # last_heartbeat_at no maestro (mantém o job vivo aos olhos do
+            # retry worker) e detecta cancelamento solicitado via UI.
+            def _notify_cancel():
+                self.report_log(
+                    job_id,
+                    "WARNING",
+                    "Cancelamento solicitado pelo usuário. Encerrando após operação atual."
+                )
+
+            with CancellationWatcher(
+                check_fn=self.check_cancellation,
+                job_id=job_id,
+                poll_interval=_CANCELLATION_POLL_INTERVAL,
+                on_cancel=_notify_cancel,
+            ) as watcher:
+                result = self._run_bot_with_heartbeat(bot_params, job_id, watcher.cancel_event)
 
             result['job_id'] = job_id
-            
+
             if result.get("status") == "completed":
                 self.report_log(job_id, "INFO", "Automação concluída com sucesso!")
                 self.report_finish(job_id, "completed", result)
                 logger.info(f"✅ Job {job_id} concluído com sucesso")
-                
+
             elif result.get("status") == "completed_no_invoices":
                 self.report_log(job_id, "INFO", "Automação concluída, porém nenhuma nota fiscal foi encontrada")
                 self.report_finish(job_id, "completed_no_invoices", result)
                 logger.info(f"✅ Job {job_id} concluído sem notas fiscais")
-                
+
+            elif result.get("status") == "canceled":
+                stage = result.get("stage", "desconhecida")
+                self.report_log(job_id, "WARNING", f"Job cancelado pelo usuário (etapa: {stage}).")
+                self.report_finish(job_id, "canceled", result)
+                logger.info(f"🛑 Job {job_id} cancelado pelo usuário (etapa: {stage})")
+
             else:
                 error_msg = result.get("error", "Falha desconhecida na execução")
                 self.report_log(job_id, "ERROR", f"Automação falhou: {error_msg}")
