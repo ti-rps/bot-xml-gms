@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     rabbitmq_queue: str = Field(default="bot-xml-tasks")
     
     maestro_api_url: str = Field(default="http://localhost:8080")
+    # WHY: middleware do maestro tem bypass-se-vazio. Quando string vazia,
+    # worker não envia o header X-Worker-API-Key e o maestro aceita. Quando
+    # populada, worker passa em todos os callbacks. Forward-compatible:
+    # ligar auth depois é só popular esta env e a do maestro + restart.
+    maestro_worker_api_key: str = Field(default="", alias="MAESTRO_WORKER_API_KEY")
 
     maestro_db_host: str = Field(default="postgres")
     maestro_db_port: int = Field(default=5432)

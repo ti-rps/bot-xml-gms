@@ -1,7 +1,8 @@
 # src/core/bot_runner.py
 import logging
 import os
-from datetime import datetime
+import threading
+from datetime import datetime, timezone
 from typing import Dict, Optional, Callable
 from src.automation.browser_handler import BrowserHandler
 from src.utils import data_handler
@@ -11,12 +12,18 @@ from src.automation.page_objects.login_page import LoginPage
 from src.automation.page_objects.home_page import HomePage
 from src.automation.page_objects.export_page import ExportPage
 from src.utils import file_handler
-from src.utils.exceptions import AutomationException, NoInvoicesFoundException
+from src.utils.exceptions import AutomationException, JobCanceledException, NoInvoicesFoundException
 
 logger = logging.getLogger(__name__)
 
 class BotRunner:
-    def __init__(self, params: dict, job_id: str = None, log_callback: Callable = None):
+    def __init__(
+        self,
+        params: dict,
+        job_id: str = None,
+        log_callback: Callable = None,
+        cancel_event: Optional[threading.Event] = None,
+    ):
         self.headless = params.get('headless', config_settings.headless)
         self.stores_to_process = params.get('stores', [])
         self.document_type = params.get('document_type')
@@ -31,6 +38,10 @@ class BotRunner:
         
         self.job_id = job_id
         self.log_callback = log_callback
+        # Default pra Event() nunca setado deixa o resto do código simétrico:
+        # cancel_event.wait(N) se comporta como sleep(N) quando o evento nunca
+        # é sinalizado.
+        self.cancel_event = cancel_event if cancel_event is not None else threading.Event()
         
         if not self.gms_user:
             self.gms_user = os.getenv('GMS_USER') or config_settings.gms_username
@@ -183,7 +194,7 @@ class BotRunner:
             logger.debug(f"Parâmetros de exportação: doc_type={self.document_type}, emitter={self.emitter}, op={self.operation_type}")
             logger.debug(f"Período: {self.start_date} até {self.end_date}")
             logger.debug(f"Lojas: {self.stores_to_process}")
-            export_page = ExportPage(driver, self.selectors.get('export_page', {}))
+            export_page = ExportPage(driver, self.selectors.get('export_page', {}), cancel_event=self.cancel_event)
             export_page.export_data(self.document_type, self.emitter, self.operation_type, self.file_type, self.invoice_situation, self.start_date, self.end_date, self.stores_to_process)
             logger.debug("✅ Dados de exportação enviados para GMS")
             
@@ -226,12 +237,35 @@ class BotRunner:
             logger.warning(f"Processo encerrado conforme esperado: {e}")
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            
+
             result.update({
                 "status": "completed_no_invoices",
                 "completed_at": end_time.isoformat(),
                 "duration_seconds": duration,
                 "summary": {"status": "concluido_sem_notas", "message": str(e)}
+            })
+
+        except JobCanceledException as e:
+            logger.warning(f"🛑 Cancelamento detectado pelo bot na etapa '{e.stage}'. Encerrando com graça.")
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+
+            # Cleanup explícito: se o cancel chegou antes de
+            # file_handler.process_downloaded_files (cujo finally limpa o pending),
+            # o pending pode ter ZIPs ou diretórios meio-baixados. Removemos aqui
+            # pra não contaminar a próxima execução. Tolerante a erros — pending
+            # é efêmero.
+            try:
+                file_handler.cleanup_pending_directory()
+            except Exception as cleanup_err:
+                logger.warning(f"Limpeza pós-cancelamento do pending falhou (tolerado): {cleanup_err}")
+
+            result.update({
+                "status": "canceled",
+                "completed_at": end_time.isoformat(),
+                "duration_seconds": duration,
+                "canceled_at": datetime.now(timezone.utc).isoformat(),
+                "stage": e.stage,
             })
 
         except AutomationException as e:

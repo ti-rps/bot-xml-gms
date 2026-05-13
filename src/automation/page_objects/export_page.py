@@ -2,9 +2,11 @@
 import json
 import os
 import shutil
+import threading
 import time
 import logging
 from pathlib import Path
+from typing import Optional
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -12,14 +14,32 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, StaleElementReferenceException, ElementNotInteractableException, ElementClickInterceptedException
 from .base_page import BasePage
 from config import settings
-from src.utils.exceptions import NoInvoicesFoundException
+from src.utils.exceptions import JobCanceledException, NoInvoicesFoundException
 
 logger = logging.getLogger(__name__)
 
 class ExportPage(BasePage):
-    def __init__(self, driver: WebDriver, selectors: dict):
+    def __init__(
+        self,
+        driver: WebDriver,
+        selectors: dict,
+        cancel_event: Optional[threading.Event] = None,
+    ):
         super().__init__(driver)
         self.selectors = selectors
+        # WHY: Event() default nunca sinalizado deixa o resto do código simétrico:
+        # _cancellable_sleep(N) se comporta como time.sleep(N) quando o evento
+        # nunca dispara — não precisa de if/else espalhado pelo código.
+        self._cancel_event = cancel_event if cancel_event is not None else threading.Event()
+
+    def _cancellable_sleep(self, seconds: float, stage: str) -> None:
+        """Sleep que aborta imediatamente quando o cancel_event é sinalizado.
+
+        Levanta JobCanceledException(stage) no momento do disparo, sem esperar
+        o resto da sleep. Quando o evento nunca dispara, behaves like time.sleep.
+        """
+        if self._cancel_event.wait(timeout=seconds):
+            raise JobCanceledException(stage)
 
     def export_data(self, document_type: str, emitter: str, operation_type: str, file_type: str, invoice_situation: str, start_date: str, end_date: str, stores_to_process: list):
         try:
@@ -141,7 +161,7 @@ class ExportPage(BasePage):
                 raise
 
             logger.info("Aguardando 30 segundos antes de verificar a tabela novamente...")
-            time.sleep(30)
+            self._cancellable_sleep(30, stage="wait_for_export_completion")
             self.driver.refresh()
             with self.switch_to_iframe(self.selectors['legado_frame']):
                 self.wait_for_element(self.selectors['search_button'])
@@ -525,7 +545,7 @@ class ExportPage(BasePage):
                 except Exception:
                     pass
 
-            time.sleep(3)
+            self._cancellable_sleep(3, stage="wait_for_download_complete")
 
         # Timeout - diagnóstico completo
         final_files = list(pending_dir.glob('*'))
