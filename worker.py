@@ -131,6 +131,58 @@ class RabbitMQWorker:
             logger.error(f"❌ Erro inesperado ao fazer requisição: {e}")
             return False
 
+    def _safe_ack(self, ch, method, requeue: Optional[bool] = None) -> None:
+        """Ack ou nack tolerante a canal fechado.
+
+        Se requeue is None, faz basic_ack. Caso contrário, basic_nack com o
+        requeue passado. Engole ChannelWrongStateError/StreamLostError/
+        ConnectionClosed: o job já foi reportado ao maestro, a reentrega vai
+        cair na verificação de idempotência (ver check_job_terminal).
+        """
+        try:
+            if requeue is None:
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            else:
+                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=requeue)
+        except (pika.exceptions.ChannelWrongStateError,
+                pika.exceptions.StreamLostError,
+                pika.exceptions.ConnectionClosed) as e:
+            logger.warning(
+                f"⚠️ Canal RabbitMQ fechado antes do {'ack' if requeue is None else 'nack'} — "
+                f"job já foi reportado ao maestro; reentrega cairá no idempotency check. {e}"
+            )
+
+    def check_job_terminal(self, job_id: str) -> Optional[Dict]:
+        """Lê o status do job no maestro. Retorna o dict de status se terminal
+        (completed/completed_no_invoices/failed/canceled), None caso contrário.
+
+        Usado no início de process_message pra detectar redelivery: se o
+        maestro já tem o job em estado terminal, a mensagem que acabamos de
+        pegar é reentrega de um ack que falhou — basta ackear e descartar.
+
+        Em 404 retorna None (job sumiu do maestro, deixa o fluxo normal lidar).
+        Em erro de rede/5xx loga warning e retorna None (vai pelo caminho
+        normal; pior caso reprocessa, melhor que travar).
+        """
+        url = f"{self.maestro_url.rstrip('/')}/api/v1/worker/jobs/{job_id}/status"
+        try:
+            response = requests.get(url, headers=self._headers(), timeout=10)
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"check_job_terminal: erro de rede consultando status do job {job_id}: {e}")
+            return None
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("terminal"):
+                return data
+            return None
+
+        if response.status_code == 404:
+            return None
+
+        logger.warning(f"check_job_terminal: status HTTP {response.status_code} para job {job_id}: {response.text}")
+        return None
+
     def check_cancellation(self, job_id: str) -> bool:
         """Polla o endpoint de cancelamento do maestro.
 
@@ -252,7 +304,21 @@ class RabbitMQWorker:
             
             if missing_fields:
                 raise ValueError(f"Campos obrigatórios faltando em 'parameters': {', '.join(missing_fields)}")
-            
+
+            # Idempotency: se o job já está em estado terminal no maestro, esta
+            # mensagem é redelivery de um ack que falhou — ackeia e descarta sem
+            # reprocessar. Sem isso, o reprocessamento de jobs grandes (8k+ XMLs)
+            # entra em loop quando o canal RabbitMQ é fechado por consumer_timeout.
+            terminal = self.check_job_terminal(job_id)
+            if terminal is not None:
+                logger.warning(
+                    f"♻️ Job {job_id} já está em estado terminal no maestro "
+                    f"(status={terminal.get('status')}, completed_at={terminal.get('completed_at')}). "
+                    f"Descartando redelivery sem reprocessar."
+                )
+                self._safe_ack(ch, method)
+                return
+
             self.report_status_start(job_id)
             self.report_log(job_id, "INFO", f"Job {job_id} iniciado. Preparando execução...")
             
@@ -320,7 +386,7 @@ class RabbitMQWorker:
                 self.report_finish(job_id, "failed", result)
                 logger.error(f"❌ Job {job_id} falhou")
             
-            ch.basic_ack(delivery_tag=method.delivery_tag)
+            self._safe_ack(ch, method)
             logger.info(f"✅ Mensagem processada e confirmada: {job_id}")
             
         except json.JSONDecodeError as e:
@@ -332,7 +398,7 @@ class RabbitMQWorker:
                     "error": f"JSON inválido: {str(e)}",
                     "error_type": "JSONDecodeError"
                 })
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            self._safe_ack(ch, method, requeue=False)
             
         except ValueError as e:
             logger.error(f"❌ Erro de validação: {e}")
@@ -342,7 +408,7 @@ class RabbitMQWorker:
                     "error": str(e),
                     "error_type": "ValidationError"
                 })
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            self._safe_ack(ch, method, requeue=False)
             
         except Exception as e:
             logger.error(f"❌ Erro ao processar mensagem: {e}", exc_info=True)
@@ -367,7 +433,7 @@ class RabbitMQWorker:
                 logger.warning(f"⚠️ Falha transitória detectada ({type(e).__name__}). Mensagem será reprocessada.")
             else:
                 logger.error(f"❌ Falha permanente detectada ({type(e).__name__}). Mensagem descartada.")
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=is_transient)
+            self._safe_ack(ch, method, requeue=is_transient)
     
     def start(self):
         logger.info("=" * 60)

@@ -5,6 +5,7 @@ import zipfile
 import shutil
 import json
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from collections import defaultdict, Counter
 from config import settings
@@ -319,13 +320,31 @@ def process_downloaded_files(document_type: str, start_date: str, end_date: str)
             # then falls back to copy+unlink, and the unlink half is flaky on the
             # mount, leaving partial state and raising PermissionError mid-loop.
             # We copy here; cleanup_pending_directory removes the source tolerantly.
-            logger.info(f"Copiando {len(items_to_move)} item(ns) para o destino final...")
-            for item in items_to_move:
+            def _copy_one(item):
                 dst = final_destination_path / item.name
                 if item.is_dir():
                     shutil.copytree(str(item), str(dst), dirs_exist_ok=True)
                 else:
                     shutil.copy2(str(item), str(dst))
+                return item.name
+
+            # WHY 8 workers: experimentos com bind-mount Windows mostram saturação
+            # do throughput em ~6-10 threads; 8 dá margem sem castigar o host.
+            logger.info(f"Copiando {len(items_to_move)} item(ns) em paralelo (8 workers)...")
+            errors = []
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                futures = {pool.submit(_copy_one, item): item for item in items_to_move}
+                for fut in as_completed(futures):
+                    item = futures[fut]
+                    try:
+                        fut.result()
+                    except Exception as e:
+                        errors.append((item.name, e))
+                        logger.error(f"Falha ao copiar '{item.name}': {e}")
+
+            if errors:
+                raise RuntimeError(f"{len(errors)} item(ns) falharam na cópia. Primeiro erro: {errors[0][1]}")
+
             logger.info("✅ Itens copiados com sucesso!")
             operation_successful = True
 
